@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "self:">
+   </FileRef>
+   <FileRef
+      location = "group:AI_TASK_FEATURE_GUIDE.md">
+   </FileRef>
+   <FileRef
+      location = "group:AI_TASK_FEATURE_SUMMARY.md">
+   </FileRef>
+   <FileRef
+      location = "group:AI_TASK_QUICK_REFERENCE.md">
+   </FileRef>
+   <FileRef
+      location = "group:AI_TASK_ARCHITECTURE.md">
+   </FileRef>
+</Workspace>
