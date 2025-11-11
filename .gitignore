@@ -1,0 +1,43 @@
+# Xcode
+*.xcuserstate
+*.xcuserdatad/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+Packages/
+Package.pins
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# Sensitive data
+*.plist
+credentials.json
+client_secret_*.json
+
+# macOS
+.DS_Store
+
+# Build artifacts
+build/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata/
+
+# Secrets and tokens
+*.secret
+*.token
+**/GoogleService-Info.plist
+
+# User-specific files
+*.swp
+*~
+.idea/

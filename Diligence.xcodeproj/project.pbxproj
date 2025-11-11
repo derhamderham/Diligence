@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2701B8B72EC3D083001D423D /* .gitignore in Sources */ = {isa = PBXBuildFile; fileRef = 2701B8B52EC3D079001D423D /* .gitignore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		271EBAD92EC2A1A9005BF905 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,6 +28,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		2701B8B52EC3D079001D423D /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
 		271EBAC92EC2A1A7005BF905 /* Diligence.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Diligence.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		271EBAD82EC2A1A9005BF905 /* DiligenceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DiligenceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		271EBAE22EC2A1A9005BF905 /* DiligenceUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DiligenceUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -79,6 +84,7 @@
 				271EBADB2EC2A1A9005BF905 /* DiligenceTests */,
 				271EBAE52EC2A1A9005BF905 /* DiligenceUITests */,
 				271EBACA2EC2A1A7005BF905 /* Products */,
+				2701B8B52EC3D079001D423D /* .gitignore */,
 			);
 			sourceTree = "<group>";
 		};
@@ -236,6 +242,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2701B8B72EC3D083001D423D /* .gitignore in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
