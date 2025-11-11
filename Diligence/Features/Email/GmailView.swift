@@ -1030,6 +1030,7 @@ struct EmailDetailView: View {
     @State private var taskDescription: String = ""
     @State private var dueDate: Date = Date().addingTimeInterval(86400) // Default to tomorrow
     @State private var hasDueDate: Bool = false
+    @State private var taskAmount: String = "" // Add amount field
     
     private var formattedTime: String {
         let formatter = DateFormatter()
@@ -1133,6 +1134,31 @@ struct EmailDetailView: View {
                                         RoundedRectangle(cornerRadius: 6)
                                             .stroke(Color(NSColor.separatorColor), lineWidth: 1)
                                     )
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Amount (optional)")
+                                    .font(.headline)
+                                HStack(spacing: 8) {
+                                    Text("$")
+                                        .font(.headline)
+                                        .foregroundColor(.secondary)
+                                    
+                                    TextField("0.00", text: $taskAmount)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                                
+                                if !taskAmount.isEmpty, let amountValue = Double(taskAmount.replacingOccurrences(of: ",", with: "")) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "dollarsign.circle")
+                                            .foregroundColor(.green)
+                                            .font(.caption)
+                                        
+                                        Text("Amount: $\(formatAmountWithCommas(amountValue))")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
                             }
                             
                             VStack(alignment: .leading, spacing: 8) {
@@ -1285,6 +1311,7 @@ struct EmailDetailView: View {
         showTaskCreation = false
         taskTitle = email.subject // Reset to original
         taskDescription = ""
+        taskAmount = "" // Reset amount
         hasDueDate = false
         dueDate = Date().addingTimeInterval(86400)
     }
@@ -1305,6 +1332,11 @@ struct EmailDetailView: View {
             gmailURL: email.gmailURL.absoluteString
         )
         
+        // Set amount if provided
+        if !taskAmount.isEmpty, let amountValue = Double(taskAmount.replacingOccurrences(of: ",", with: "")) {
+            newTask.amount = amountValue
+        }
+        
         modelContext.insert(newTask)
         
         do {
@@ -1313,11 +1345,22 @@ struct EmailDetailView: View {
             showTaskCreation = false
             taskTitle = email.subject // Reset to original
             taskDescription = ""
+            taskAmount = "" // Reset amount
             hasDueDate = false
             dueDate = Date().addingTimeInterval(86400)
         } catch {
             print("Failed to save task: \(error)")
         }
+    }
+    
+    private func formatAmountWithCommas(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        formatter.groupingSeparator = ","
+        formatter.groupingSize = 3
+        return formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
     }
     
     private func removeEmail() {

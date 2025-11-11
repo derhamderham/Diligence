@@ -371,7 +371,7 @@ final class DiligenceTask {
     /// - Parameter date: The reference date to calculate from
     /// - Returns: The next scheduled due date, or `nil` if not recurring
     func calculateNextDueDate(from date: Date) -> Date? {
-        guard recurrencePattern != .never, let currentDue = dueDate else {
+        guard recurrencePattern != .never else {
             return nil
         }
         
@@ -382,11 +382,11 @@ final class DiligenceTask {
             return nil
             
         case .daily:
-            return calendar.date(byAdding: .day, value: recurrenceInterval, to: currentDue)
+            return calendar.date(byAdding: .day, value: recurrenceInterval, to: date)
             
         case .weekdays:
             // Find the next weekday (Monday through Friday)
-            var nextDate = calendar.date(byAdding: .day, value: 1, to: currentDue) ?? currentDue
+            var nextDate = calendar.date(byAdding: .day, value: 1, to: date) ?? date
             while calendar.component(.weekday, from: nextDate) == 1 || 
                   calendar.component(.weekday, from: nextDate) == 7 {
                 nextDate = calendar.date(byAdding: .day, value: 1, to: nextDate) ?? nextDate
@@ -396,27 +396,27 @@ final class DiligenceTask {
         case .weekly:
             if recurrenceWeekdays.isEmpty {
                 // Simple weekly recurrence
-                return calendar.date(byAdding: .weekOfYear, value: recurrenceInterval, to: currentDue)
+                return calendar.date(byAdding: .weekOfYear, value: recurrenceInterval, to: date)
             } else {
                 // Custom weekly pattern - find next selected weekday
-                return findNextWeekdayDate(from: currentDue, calendar: calendar)
+                return findNextWeekdayDate(from: date, calendar: calendar)
             }
             
         case .biweekly:
-            return calendar.date(byAdding: .weekOfYear, value: 2 * recurrenceInterval, to: currentDue)
+            return calendar.date(byAdding: .weekOfYear, value: 2 * recurrenceInterval, to: date)
             
         case .monthly:
-            return calendar.date(byAdding: .month, value: recurrenceInterval, to: currentDue)
+            return calendar.date(byAdding: .month, value: recurrenceInterval, to: date)
             
         case .yearly:
-            return calendar.date(byAdding: .year, value: recurrenceInterval, to: currentDue)
+            return calendar.date(byAdding: .year, value: recurrenceInterval, to: date)
             
         case .custom:
             // For custom patterns, fall back to weekly if weekdays are set
             if !recurrenceWeekdays.isEmpty {
-                return findNextWeekdayDate(from: currentDue, calendar: calendar)
+                return findNextWeekdayDate(from: date, calendar: calendar)
             }
-            return calendar.date(byAdding: .day, value: recurrenceInterval, to: currentDue)
+            return calendar.date(byAdding: .day, value: recurrenceInterval, to: date)
         }
     }
     
@@ -425,16 +425,21 @@ final class DiligenceTask {
         let currentWeekday = calendar.component(.weekday, from: date)
         let sortedWeekdays = recurrenceWeekdays.sorted()
         
-        // Find the next weekday in this week
+        // Find the next weekday in the current recurrence period
         if let nextWeekday = sortedWeekdays.first(where: { $0 > currentWeekday }) {
             let daysToAdd = nextWeekday - currentWeekday
             return calendar.date(byAdding: .day, value: daysToAdd, to: date)
         }
         
-        // If no weekday left this week, go to first weekday of next week
+        // If no weekday left in current period, advance by recurrence interval weeks
+        // and go to the first selected weekday
         if let firstWeekday = sortedWeekdays.first {
-            let daysUntilNextWeek = 7 - currentWeekday + firstWeekday
-            return calendar.date(byAdding: .day, value: daysUntilNextWeek, to: date)
+            // Calculate days to the first weekday of the next recurrence period
+            let daysInCurrentWeek = 7 - currentWeekday
+            let weeksToSkip = max(1, recurrenceInterval) - 1 // Skip additional weeks if interval > 1
+            let extraDays = weeksToSkip * 7
+            let daysToFirstWeekday = daysInCurrentWeek + extraDays + firstWeekday
+            return calendar.date(byAdding: .day, value: daysToFirstWeekday, to: date)
         }
         
         return nil

@@ -54,21 +54,59 @@ class TaskSection {
         tasks.filter { $0.isCompleted }
     }
     
-    // Group tasks by sections
+    // Group tasks by sections and sort by due date
     func tasksForSection(_ section: TaskSection) -> [DiligenceTask] {
         let tasksInSection = tasks.filter { $0.sectionID == section.id }
-        if !tasksInSection.isEmpty {
-            print("📋 Section '\(section.title)' (\(section.id)) contains tasks: \(tasksInSection.map { $0.title })")
+        
+        // Sort by due date: tasks with due dates first (sorted by date), then tasks without due dates
+        let sortedTasks = tasksInSection.sorted { task1, task2 in
+            switch (task1.dueDate, task2.dueDate) {
+            case (let date1?, let date2?):
+                // Both have due dates - sort by date (earliest first)
+                return date1 < date2
+            case (nil, _?):
+                // task1 has no due date, task2 has due date - task2 comes first
+                return false
+            case (_?, nil):
+                // task1 has due date, task2 has no due date - task1 comes first
+                return true
+            case (nil, nil):
+                // Neither has due date - sort by creation date (newest first)
+                return task1.createdDate > task2.createdDate
+            }
         }
-        return tasksInSection
+        
+        if !sortedTasks.isEmpty {
+            print("📋 Section '\(section.title)' (\(section.id)) contains \(sortedTasks.count) tasks sorted by due date")
+        }
+        return sortedTasks
     }
     
     var unsectionedTasks: [DiligenceTask] {
         let unsectioned = tasks.filter { $0.sectionID == nil || $0.sectionID?.isEmpty == true }
-        if !unsectioned.isEmpty {
-            print("📋 Unsectioned tasks: \(unsectioned.map { "'\($0.title)' (sectionID: \($0.sectionID ?? "nil"))" })")
+        
+        // Sort by due date: tasks with due dates first (sorted by date), then tasks without due dates
+        let sortedTasks = unsectioned.sorted { task1, task2 in
+            switch (task1.dueDate, task2.dueDate) {
+            case (let date1?, let date2?):
+                // Both have due dates - sort by date (earliest first)
+                return date1 < date2
+            case (nil, _?):
+                // task1 has no due date, task2 has due date - task2 comes first
+                return false
+            case (_?, nil):
+                // task1 has due date, task2 has no due date - task1 comes first
+                return true
+            case (nil, nil):
+                // Neither has due date - sort by creation date (newest first)
+                return task1.createdDate > task2.createdDate
+            }
         }
-        return unsectioned
+        
+        if !sortedTasks.isEmpty {
+            print("📋 Unsectioned tasks: \(sortedTasks.count) tasks sorted by due date")
+        }
+        return sortedTasks
     }
     
     // MARK: - View Components
@@ -922,6 +960,7 @@ struct TaskDetailView: View {
                             Text(task.title)
                                 .font(.title)
                                 .fontWeight(.medium)
+                                .textSelection(.enabled)
                         }
                         
                         HStack(spacing: 16) {
@@ -1001,6 +1040,7 @@ struct TaskDetailView: View {
                                 Text(section.title)
                                     .font(.subheadline)
                                     .fontWeight(.medium)
+                                    .textSelection(.enabled)
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -1037,9 +1077,11 @@ struct TaskDetailView: View {
                                 if dueDateHasTime(dueDate) {
                                     Text("\(Self.dueDateWithTimeFormatter.string(from: dueDate))\(dueDate < Date() ? " (Overdue)" : "")")
                                         .foregroundColor(dueDate < Date() ? .red : .orange)
+                                        .textSelection(.enabled)
                                 } else {
                                     Text("\(Self.dueDateDateOnlyFormatter.string(from: dueDate))\(dueDate < Date() ? " (Overdue)" : "")")
                                         .foregroundColor(dueDate < Date() ? .red : .orange)
+                                        .textSelection(.enabled)
                                 }
                             }
                         } else {
@@ -1084,29 +1126,29 @@ struct TaskDetailView: View {
                         .font(.headline)
                     
                     if isEditing {
-                        Toggle("Set Amount", isOn: $editedHasAmount)
-                            .toggleStyle(SwitchToggleStyle())
-                        
-                        if editedHasAmount {
-                            HStack(spacing: 8) {
-                                Text("$")
-                                    .font(.headline)
-                                    .foregroundColor(.secondary)
-                                
-                                TextField("0.00", text: $editedAmount)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.body)
-                            }
+                        HStack(spacing: 8) {
+                            Text("$")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                            
+                            TextField("0.00", text: $editedAmount)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.body)
                         }
+                        
+                        Text("Optional - for bills, invoices, or financial tasks")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     } else {
                         if let amount = task.amount, amount > 0 {
                             HStack(spacing: 6) {
                                 Image(systemName: "dollarsign.circle")
                                     .foregroundColor(.green)
                                 
-                                Text("$\(String(format: "%.2f", amount))")
+                                Text("$\(formatAmountWithCommas(amount))")
                                     .font(.subheadline)
                                     .fontWeight(.medium)
+                                    .textSelection(.enabled)
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -1142,6 +1184,7 @@ struct TaskDetailView: View {
                                     
                                     Text(emailSubject)
                                         .font(.subheadline)
+                                        .textSelection(.enabled)
                                 }
                             }
                             
@@ -1153,6 +1196,7 @@ struct TaskDetailView: View {
                                     
                                     Text(emailSender)
                                         .font(.subheadline)
+                                        .textSelection(.enabled)
                                 }
                             }
                             
@@ -1193,14 +1237,24 @@ struct TaskDetailView: View {
         isEditing = true
     }
     
+    private func formatAmountWithCommas(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        formatter.groupingSeparator = ","
+        formatter.groupingSize = 3
+        return formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
+    }
+    
     private func saveChanges() {
         task.title = editedTitle
         task.taskDescription = editedDescription
         task.dueDate = editedHasDueDate ? editedDueDate : nil
         task.sectionID = editedSectionID
         
-        // Save amount for bills/invoices
-        if editedHasAmount, let amountValue = Double(editedAmount) {
+        // Save amount for bills/invoices (no toggle needed)
+        if !editedAmount.isEmpty, let amountValue = Double(editedAmount.replacingOccurrences(of: ",", with: "")) {
             task.amount = amountValue
         } else {
             task.amount = nil
@@ -1512,30 +1566,25 @@ struct CreateTaskDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    Toggle("Set amount", isOn: $hasAmount)
-                        .toggleStyle(SwitchToggleStyle())
-                    
-                    if hasAmount {
-                        HStack(spacing: 8) {
-                            Text("$")
-                                .font(.headline)
-                                .foregroundColor(.secondary)
-                            
-                            TextField("0.00", text: $amount)
-                                .textFieldStyle(.roundedBorder)
-                                .font(.body)
-                        }
+                    HStack(spacing: 8) {
+                        Text("$")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
                         
-                        if !amount.isEmpty, let amountValue = Double(amount) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "dollarsign.circle")
-                                    .foregroundColor(.green)
-                                    .font(.caption)
-                                
-                                Text("Amount: $\(String(format: "%.2f", amountValue))")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
+                        TextField("0.00", text: $amount)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.body)
+                    }
+                    
+                    if !amount.isEmpty, let amountValue = Double(amount.replacingOccurrences(of: ",", with: "")) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "dollarsign.circle")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                            
+                            Text("Amount: $\(formatAmountWithCommas(amountValue))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
@@ -1632,6 +1681,16 @@ struct CreateTaskDetailView: View {
         recurrenceEndCount = 10
     }
     
+    private func formatAmountWithCommas(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        formatter.groupingSeparator = ","
+        formatter.groupingSize = 3
+        return formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
+    }
+    
     private func createTask() {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
@@ -1657,8 +1716,8 @@ struct CreateTaskDetailView: View {
         // Assign to selected section
         newTask.sectionID = selectedSectionID
         
-        // Set amount for bills/invoices
-        if hasAmount, let amountValue = Double(amount) {
+        // Set amount for bills/invoices (no toggle needed)
+        if !amount.isEmpty, let amountValue = Double(amount.replacingOccurrences(of: ",", with: "")) {
             newTask.amount = amountValue
         }
         

@@ -115,9 +115,22 @@ class GmailService: ObservableObject, GmailServiceProtocol {
         }
     }
     
-    // Email caching
-    private let emailCacheKey = "DiligenceCachedEmails"
+    // Email caching - using file system instead of UserDefaults
+    private let emailCacheFileName = "DiligenceEmailCache.json"
     private let cacheTimestampKey = "DiligenceEmailCacheTimestamp"
+    
+    // Get cache file URL
+    private var emailCacheFileURL: URL? {
+        guard let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let diligenceDir = appSupportURL.appendingPathComponent("Diligence", isDirectory: true)
+        
+        // Create directory if it doesn't exist
+        try? FileManager.default.createDirectory(at: diligenceDir, withIntermediateDirectories: true)
+        
+        return diligenceDir.appendingPathComponent(emailCacheFileName)
+    }
     
     // Gmail OAuth configuration
     private let clientID = GmailConfiguration.clientID
@@ -129,6 +142,10 @@ class GmailService: ObservableObject, GmailServiceProtocol {
     
     init() {
         loadCredentialsFromKeychain()
+        
+        // Migrate old UserDefaults cache to file-based cache
+        migrateOldCacheToFile()
+        
         loadEmailsFromCache()
         
         // Fetch user profile if authenticated
@@ -137,6 +154,27 @@ class GmailService: ObservableObject, GmailServiceProtocol {
                 await fetchUserProfile()
             }
         }
+    }
+    
+    /// Migrates old UserDefaults-based cache to file-based cache
+    private func migrateOldCacheToFile() {
+        let oldCacheKey = "DiligenceCachedEmails"
+        
+        // Check if old cache exists
+        guard let oldCachedData = UserDefaults.standard.data(forKey: oldCacheKey),
+              let oldCachedEmails = try? JSONDecoder().decode([ProcessedEmail].self, from: oldCachedData) else {
+            return
+        }
+        
+        print("📧 Migrating \(oldCachedEmails.count) emails from UserDefaults to file cache...")
+        
+        // Save to new file-based cache
+        saveEmailsToCache(oldCachedEmails)
+        
+        // Remove old cache from UserDefaults
+        UserDefaults.standard.removeObject(forKey: oldCacheKey)
+        
+        print("📧 Migration complete - removed old UserDefaults cache")
     }
     
     // MARK: - Authentication
@@ -853,10 +891,15 @@ class GmailService: ObservableObject, GmailServiceProtocol {
         )
     }
     
-    // MARK: - Email Caching
+    // MARK: - Email Caching (File-based)
     
     private func loadEmailsFromCache() {
-        guard let cachedData = UserDefaults.standard.data(forKey: emailCacheKey),
+        guard let cacheFileURL = emailCacheFileURL else {
+            print("📧 Could not determine cache file location")
+            return
+        }
+        
+        guard let cachedData = try? Data(contentsOf: cacheFileURL),
               let cachedEmails = try? JSONDecoder().decode([ProcessedEmail].self, from: cachedData) else {
             print("📧 No cached emails found")
             return
@@ -878,23 +921,32 @@ class GmailService: ObservableObject, GmailServiceProtocol {
             .sorted { $0.receivedDate > $1.receivedDate }
         
         self.emails = filteredEmails
-        print("📧 Loaded \(filteredEmails.count) emails from cache")
+        print("📧 Loaded \(filteredEmails.count) emails from file cache")
     }
     
     private func saveEmailsToCache(_ emails: [ProcessedEmail]) {
-        guard let encodedData = try? JSONEncoder().encode(emails) else {
+        guard let cacheFileURL = emailCacheFileURL,
+              let encodedData = try? JSONEncoder().encode(emails) else {
             print("📧 Failed to encode emails for caching")
             return
         }
         
-        UserDefaults.standard.set(encodedData, forKey: emailCacheKey)
-        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: cacheTimestampKey)
-        
-        print("📧 Saved \(emails.count) emails to cache")
+        // Save to file instead of UserDefaults
+        do {
+            try encodedData.write(to: cacheFileURL, options: [.atomic])
+            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: cacheTimestampKey)
+            
+            let sizeInMB = Double(encodedData.count) / 1_048_576.0
+            print("📧 Saved \(emails.count) emails to file cache (\(String(format: "%.2f", sizeInMB)) MB)")
+        } catch {
+            print("📧 Failed to write cache file: \(error)")
+        }
     }
     
     private func clearEmailCache() {
-        UserDefaults.standard.removeObject(forKey: emailCacheKey)
+        if let cacheFileURL = emailCacheFileURL {
+            try? FileManager.default.removeItem(at: cacheFileURL)
+        }
         UserDefaults.standard.removeObject(forKey: cacheTimestampKey)
         print("📧 Cleared email cache")
     }

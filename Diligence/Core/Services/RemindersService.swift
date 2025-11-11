@@ -944,22 +944,18 @@ class RemindersService: ObservableObject {
             let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: dueDate)
             reminder.dueDateComponents = components
             
-            // Alarm handling: Create alarm safely to avoid sandbox issues
-            if let alarms = reminder.alarms {
+            // Note: We don't set alarms here to avoid sandbox/URL-related errors
+            // The Reminders app will handle alarm notifications based on the due date
+            // Remove any existing alarms to keep it clean
+            if let alarms = reminder.alarms, !alarms.isEmpty {
                 for alarm in alarms {
                     reminder.removeAlarm(alarm)
                 }
             }
-            
-            // Create alarm with minimal configuration to avoid URL-related errors
-            print("📝 DEBUG: Creating alarm for reminder: \(task.title)")
-            let alarm = EKAlarm(relativeOffset: 0) // at due date
-            print("📝 DEBUG: Alarm created, adding to reminder...")
-            reminder.addAlarm(alarm)
-            print("📝 DEBUG: Alarm added successfully")
         } else {
             reminder.dueDateComponents = nil
-            if let alarms = reminder.alarms {
+            // Remove alarms if no due date
+            if let alarms = reminder.alarms, !alarms.isEmpty {
                 for alarm in alarms {
                     reminder.removeAlarm(alarm)
                 }
