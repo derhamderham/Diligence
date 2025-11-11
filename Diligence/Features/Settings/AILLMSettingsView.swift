@@ -21,9 +21,8 @@ struct AILLMSettingsView: View {
     @State private var llmAutoDetectModel: Bool = UserDefaults.standard.llmAutoDetectModel
     @State private var llmStreamingEnabled: Bool = UserDefaults.standard.llmStreamingEnabled
     
-    // Enhanced AI Service
-    @StateObject private var enhancedAIService = EnhancedAIEmailService()
-    @StateObject private var llmService = LLMService()
+    // Enhanced AI Service - use shared instance from DependencyContainer
+    @Environment(\.dependencyContainer) private var container
     
     // UI State
     @State private var connectionStatus: Bool? = nil
@@ -31,6 +30,15 @@ struct AILLMSettingsView: View {
     @State private var availableModels: [String] = LLMConfiguration.availableModels
     @State private var isDetectingModel = false
     @State private var isTestingConnection = false
+    
+    // Computed property to access the shared service
+    private var enhancedAIService: EnhancedAIEmailService? {
+        container.enhancedAIService
+    }
+    
+    private var llmService: LLMService? {
+        container.llmService
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -49,231 +57,79 @@ struct AILLMSettingsView: View {
             }
             
             if llmFeatureEnabled {
-                // AI Provider Selection
-                ModernSettingsSection(title: "AI Provider") {
-                    ModernSettingsRow(
-                        title: "Active Provider",
-                        description: "Current AI service being used"
-                    ) {
-                        HStack(spacing: 8) {
-                            Image(systemName: enhancedAIService.selectedProvider.icon)
-                                .font(.system(size: 12))
-                                .foregroundColor(enhancedAIService.currentServiceColor)
-                            
-                            Text(enhancedAIService.selectedProvider.displayName)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(enhancedAIService.currentServiceColor)
-                        }
-                    }
-                    
-                    ModernSettingsRow(
-                        title: "Provider Status",
-                        description: enhancedAIService.currentServiceStatus
-                    ) {
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(enhancedAIService.currentServiceColor)
-                                .frame(width: 8, height: 8)
-                            
-                            Text(enhancedAIService.hasAvailableService ? "Available" : "Unavailable")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(enhancedAIService.currentServiceColor)
-                        }
-                    }
-                }
-                
-                // AI Provider Selection Buttons
-                HStack(spacing: 12) {
-                    ForEach(EnhancedAIEmailService.AIProvider.allCases, id: \.self) { provider in
-                        Button(action: {
-                            enhancedAIService.switchProvider(provider)
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: provider.icon)
-                                Text(provider.displayName)
-                            }
-                            .font(.system(size: 11))
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(!enhancedAIService.availableProviders.contains(provider))
-                    }
-                    
-                    Spacer()
-                }
-                .padding(.vertical, 8)
-                
-                // Apple Intelligence Settings
-                if enhancedAIService.selectedProvider == .appleIntelligence {
-                    ModernSettingsSection(title: "Apple Intelligence") {
+                if let enhancedAI = enhancedAIService {
+                    // AI Provider Selection
+                    ModernSettingsSection(title: "AI Provider") {
                         ModernSettingsRow(
-                            title: "Device Support",
-                            description: "Apple Intelligence availability on this device"
-                        ) {
-                            Text(enhancedAIService.isAppleIntelligenceAvailable ? "Supported" : "Not Available")
-                                .font(.system(size: 12))
-                                .foregroundColor(enhancedAIService.isAppleIntelligenceAvailable ? .green : .orange)
-                        }
-                        
-                        if !enhancedAIService.isAppleIntelligenceAvailable {
-                            ModernSettingsRow(
-                                title: "Setup Required",
-                                description: "Enable Apple Intelligence in System Settings"
-                            ) {
-                                Button("Open System Settings") {
-                                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security") {
-                                        NSWorkspace.shared.open(url)
-                                    }
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                            }
-                        }
-                    }
-                }
-                
-                // Jan.ai Settings
-                if enhancedAIService.selectedProvider == .janAI {
-                    ModernSettingsSection(title: "Jan.ai Configuration") {
-                        ModernSettingsRow(
-                            title: "Server URL",
-                            description: "Base URL for Jan.ai local server"
-                        ) {
-                            VStack(alignment: .trailing, spacing: 4) {
-                                TextField("http://localhost:1337", text: $llmBaseURL)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(size: 11))
-                                    .monospaced()
-                                    .frame(width: 200)
-                                    .onChange(of: llmBaseURL) { _, newValue in
-                                        UserDefaults.standard.customLLMBaseURL = newValue
-                                    }
-                                
-                                Button("Test Connection") {
-                                    testConnection()
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.mini)
-                                .disabled(isTestingConnection)
-                            }
-                        }
-                        
-                        ModernSettingsRow(
-                            title: "Connection Status",
-                            description: connectionStatusDescription
+                            title: "Active Provider",
+                            description: "Current AI service being used"
                         ) {
                             HStack(spacing: 8) {
-                                if isTestingConnection {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle())
-                                        .scaleEffect(0.5)
-                                        .frame(width: 8, height: 8, alignment: .center)
-                                        .fixedSize()
-                                } else {
-                                    Circle()
-                                        .fill(connectionStatusColor)
-                                        .frame(width: 8, height: 8)
-                                }
+                                Image(systemName: enhancedAI.selectedProvider.icon)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(enhancedAI.currentServiceColor)
                                 
-                                Text(connectionStatusText)
+                                Text(enhancedAI.selectedProvider.displayName)
                                     .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(connectionStatusColor)
+                                    .foregroundColor(enhancedAI.currentServiceColor)
                             }
                         }
                         
                         ModernSettingsRow(
-                            title: "Model",
-                            description: "Language model to use for AI tasks"
+                            title: "Provider Status",
+                            description: enhancedAI.currentServiceStatus
                         ) {
-                            VStack(alignment: .trailing, spacing: 4) {
-                                Picker("", selection: $selectedLLMModel) {
-                                    ForEach(availableModels, id: \.self) { model in
-                                        Text(model).tag(model)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-                                .frame(width: 200)
-                                .controlSize(.small)
-                                .onChange(of: selectedLLMModel) { _, newValue in
-                                    UserDefaults.standard.selectedLLMModel = newValue
-                                }
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(enhancedAI.currentServiceColor)
+                                    .frame(width: 8, height: 8)
                                 
-                                HStack(spacing: 8) {
-                                    Button("Auto-detect") {
-                                        detectCurrentModel()
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.mini)
-                                    .disabled(isDetectingModel)
-                                    
-                                    Button("Refresh List") {
-                                        refreshModelList()
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.mini)
-                                }
+                                Text(enhancedAI.hasAvailableService ? "Available" : "Unavailable")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(enhancedAI.currentServiceColor)
                             }
-                        }
-                        
-                        ModernSettingsRow(
-                            title: "Auto-detect model",
-                            description: "Automatically detect the active model from Jan.ai"
-                        ) {
-                            Toggle("", isOn: $llmAutoDetectModel)
-                                .toggleStyle(.switch)
-                                .controlSize(.small)
-                                .onChange(of: llmAutoDetectModel) { _, newValue in
-                                    UserDefaults.standard.llmAutoDetectModel = newValue
-                                }
                         }
                     }
                     
-                    ModernSettingsSection(title: "Model Parameters") {
-                        ModernSettingsRow(
-                            title: "Temperature",
-                            description: "Creativity level: 0.0 (focused) to 1.0 (creative)"
-                        ) {
-                            VStack(alignment: .trailing, spacing: 4) {
-                                HStack {
-                                    Slider(value: $llmTemperature, in: 0.0...1.0, step: 0.1)
-                                        .frame(width: 120)
-                                    
-                                    Text(String(format: "%.1f", llmTemperature))
-                                        .font(.system(size: 11))
-                                        .monospaced()
-                                        .frame(width: 30)
+                    // AI Provider Selection Buttons
+                    HStack(spacing: 12) {
+                        ForEach(EnhancedAIEmailService.AIProvider.allCases, id: \.self) { provider in
+                            Button(action: {
+                                enhancedAI.switchProvider(provider)
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: provider.icon)
+                                    Text(provider.displayName)
                                 }
-                                .onChange(of: llmTemperature) { _, newValue in
-                                    UserDefaults.standard.llmTemperature = newValue
-                                }
+                                .font(.system(size: 11))
                             }
-                        }
-                        
-                        ModernSettingsRow(
-                            title: "Max tokens",
-                            description: "Maximum response length"
-                        ) {
-                            Stepper(value: $llmMaxTokens, in: 100...4000, step: 100) {
-                                Text("\(llmMaxTokens)")
-                                    .font(.system(size: 12))
-                                    .frame(width: 50)
-                            }
+                            .buttonStyle(.bordered)
                             .controlSize(.small)
-                            .onChange(of: llmMaxTokens) { _, newValue in
-                                UserDefaults.standard.llmMaxTokens = newValue
-                            }
+                            .disabled(!enhancedAI.availableProviders.contains(provider))
                         }
                         
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    
+                    // Apple Intelligence Settings
+                    if enhancedAI.selectedProvider == .appleIntelligence {
+                        appleIntelligenceSection(enhancedAI)
+                    }
+                    
+                    // Jan.ai Settings
+                    if enhancedAI.selectedProvider == .janAI {
+                        janAISection()
+                    }
+                } else {
+                    // Service not available
+                    ModernSettingsSection(title: "AI Service") {
                         ModernSettingsRow(
-                            title: "Streaming responses",
-                            description: "Stream AI responses as they're generated"
+                            title: "Service Status",
+                            description: "AI service is initializing..."
                         ) {
-                            Toggle("", isOn: $llmStreamingEnabled)
-                                .toggleStyle(.switch)
+                            ProgressView()
                                 .controlSize(.small)
-                                .onChange(of: llmStreamingEnabled) { _, newValue in
-                                    UserDefaults.standard.llmStreamingEnabled = newValue
-                                }
                         }
                     }
                 }
@@ -282,9 +138,185 @@ struct AILLMSettingsView: View {
             Spacer()
         }
         .onAppear {
-            _Concurrency.Task {
-                await enhancedAIService.initialize()
-                testConnection()
+            // Service is already initialized at app launch
+            // Just test the connection
+            testConnection()
+        }
+    }
+    
+    // MARK: - Section Views
+    
+    @ViewBuilder
+    private func appleIntelligenceSection(_ enhancedAI: EnhancedAIEmailService) -> some View {
+        ModernSettingsSection(title: "Apple Intelligence") {
+            ModernSettingsRow(
+                title: "Device Support",
+                description: "Apple Intelligence availability on this device"
+            ) {
+                Text(enhancedAI.isAppleIntelligenceAvailable ? "Supported" : "Not Available")
+                    .font(.system(size: 12))
+                    .foregroundColor(enhancedAI.isAppleIntelligenceAvailable ? .green : .orange)
+            }
+            
+            if !enhancedAI.isAppleIntelligenceAvailable {
+                ModernSettingsRow(
+                    title: "Setup Required",
+                    description: "Enable Apple Intelligence in System Settings"
+                ) {
+                    Button("Open System Settings") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func janAISection() -> some View {
+        ModernSettingsSection(title: "Jan.ai Configuration") {
+            ModernSettingsRow(
+                title: "Server URL",
+                description: "Base URL for Jan.ai local server"
+            ) {
+                VStack(alignment: .trailing, spacing: 4) {
+                    TextField("http://localhost:1337", text: $llmBaseURL)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+                        .monospaced()
+                        .frame(width: 200)
+                        .onChange(of: llmBaseURL) { _, newValue in
+                            UserDefaults.standard.customLLMBaseURL = newValue
+                        }
+                    
+                    Button("Test Connection") {
+                        testConnection()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .disabled(isTestingConnection)
+                }
+            }
+            
+            ModernSettingsRow(
+                title: "Connection Status",
+                description: connectionStatusDescription
+            ) {
+                HStack(spacing: 8) {
+                    if isTestingConnection {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .scaleEffect(0.5)
+                            .frame(width: 8, height: 8, alignment: .center)
+                            .fixedSize()
+                    } else {
+                        Circle()
+                            .fill(connectionStatusColor)
+                            .frame(width: 8, height: 8)
+                    }
+                    
+                    Text(connectionStatusText)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(connectionStatusColor)
+                }
+            }
+            
+            ModernSettingsRow(
+                title: "Model",
+                description: "Language model to use for AI tasks"
+            ) {
+                VStack(alignment: .trailing, spacing: 4) {
+                    Picker("", selection: $selectedLLMModel) {
+                        ForEach(availableModels, id: \.self) { model in
+                            Text(model).tag(model)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 200)
+                    .controlSize(.small)
+                    .onChange(of: selectedLLMModel) { _, newValue in
+                        UserDefaults.standard.selectedLLMModel = newValue
+                    }
+                    
+                    HStack(spacing: 8) {
+                        Button("Auto-detect") {
+                            detectCurrentModel()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .disabled(isDetectingModel)
+                        
+                        Button("Refresh List") {
+                            refreshModelList()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                    }
+                }
+            }
+            
+            ModernSettingsRow(
+                title: "Auto-detect model",
+                description: "Automatically detect the active model from Jan.ai"
+            ) {
+                Toggle("", isOn: $llmAutoDetectModel)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .onChange(of: llmAutoDetectModel) { _, newValue in
+                        UserDefaults.standard.llmAutoDetectModel = newValue
+                    }
+            }
+        }
+        
+        ModernSettingsSection(title: "Model Parameters") {
+            ModernSettingsRow(
+                title: "Temperature",
+                description: "Creativity level: 0.0 (focused) to 1.0 (creative)"
+            ) {
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack {
+                        Slider(value: $llmTemperature, in: 0.0...1.0, step: 0.1)
+                            .frame(width: 120)
+                        
+                        Text(String(format: "%.1f", llmTemperature))
+                            .font(.system(size: 11))
+                            .monospaced()
+                            .frame(width: 30)
+                    }
+                    .onChange(of: llmTemperature) { _, newValue in
+                        UserDefaults.standard.llmTemperature = newValue
+                    }
+                }
+            }
+            
+            ModernSettingsRow(
+                title: "Max tokens",
+                description: "Maximum response length"
+            ) {
+                Stepper(value: $llmMaxTokens, in: 100...4000, step: 100) {
+                    Text("\(llmMaxTokens)")
+                        .font(.system(size: 12))
+                        .frame(width: 50)
+                }
+                .controlSize(.small)
+                .onChange(of: llmMaxTokens) { _, newValue in
+                    UserDefaults.standard.llmMaxTokens = newValue
+                }
+            }
+            
+            ModernSettingsRow(
+                title: "Streaming responses",
+                description: "Stream AI responses as they're generated"
+            ) {
+                Toggle("", isOn: $llmStreamingEnabled)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .onChange(of: llmStreamingEnabled) { _, newValue in
+                        UserDefaults.standard.llmStreamingEnabled = newValue
+                    }
             }
         }
     }
@@ -319,7 +351,16 @@ struct AILLMSettingsView: View {
         isTestingConnection = true
         
         _Concurrency.Task {
-            let result = await llmService.checkServiceAvailability(autoDetectModel: false)
+            guard let llm = llmService else {
+                await MainActor.run {
+                    connectionStatus = false
+                    connectionError = "LLM service not available"
+                    isTestingConnection = false
+                }
+                return
+            }
+            
+            let result = await llm.checkServiceAvailability(autoDetectModel: false)
             
             await MainActor.run {
                 connectionStatus = result
@@ -336,11 +377,12 @@ struct AILLMSettingsView: View {
     
     private func detectCurrentModel() {
         guard !isDetectingModel else { return }
+        guard let llm = llmService else { return }
         
         isDetectingModel = true
         
         _Concurrency.Task {
-            let detectedModel = await llmService.refreshCurrentModel()
+            let detectedModel = await llm.refreshCurrentModel()
             
             await MainActor.run {
                 if let detectedModel = detectedModel, !detectedModel.isEmpty {
@@ -353,8 +395,10 @@ struct AILLMSettingsView: View {
     }
     
     private func refreshModelList() {
+        guard let llm = llmService else { return }
+        
         _Concurrency.Task {
-            let serverModels = await llmService.getAvailableModelsFromServer()
+            let serverModels = await llm.getAvailableModelsFromServer()
             
             await MainActor.run {
                 if !serverModels.isEmpty {

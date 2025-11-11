@@ -3,7 +3,7 @@
 //  Diligence
 //
 //  Created by derham on 11/10/25.
-//  Updated to include sidebar navigation
+//  Updated to include sidebar navigation with Settings button
 //
 
 import SwiftUI
@@ -13,6 +13,7 @@ import Combine
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dependencyContainer) private var container
+    @Environment(\.openSettings) private var openSettings
     
     // Sidebar navigation
     @State private var selectedView: NavigationItem? = .tasks
@@ -20,6 +21,7 @@ struct ContentView: View {
     enum NavigationItem: String, CaseIterable, Identifiable {
         case tasks = "Tasks"
         case gmail = "Gmail"
+        case settings = "Settings"
         
         var id: String { rawValue }
         
@@ -27,6 +29,7 @@ struct ContentView: View {
             switch self {
             case .tasks: return "checkmark.circle"
             case .gmail: return "envelope"
+            case .settings: return "gearshape"
             }
         }
     }
@@ -34,9 +37,24 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             // Sidebar
-            List(NavigationItem.allCases, selection: $selectedView) { item in
-                NavigationLink(value: item) {
-                    Label(item.rawValue, systemImage: item.icon)
+            List(selection: $selectedView) {
+                Section("Navigation") {
+                    ForEach([NavigationItem.tasks, NavigationItem.gmail], id: \.self) { item in
+                        NavigationLink(value: item) {
+                            Label(item.rawValue, systemImage: item.icon)
+                        }
+                    }
+                }
+                
+                Section("Configuration") {
+                    Button(action: {
+                        openSettings()
+                    }) {
+                        Label("Settings", systemImage: "gearshape")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .navigationTitle("Diligence")
@@ -49,7 +67,7 @@ struct ContentView: View {
                     TaskListView()
                 case .gmail:
                     GmailView()
-                case .none:
+                case .settings, .none:
                     placeholderView
                 }
             }

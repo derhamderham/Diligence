@@ -132,6 +132,19 @@ class GmailService: ObservableObject, GmailServiceProtocol {
         return diligenceDir.appendingPathComponent(emailCacheFileName)
     }
     
+    private func loadEmailsAsync(forceRefresh: Bool = false) {
+        _Concurrency.Task {
+            await self.validateAndRefreshSession()
+            
+            // Add a small delay to let connection fully establish
+            try? await _Concurrency.Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            
+            if self.isAuthenticated {
+                await self.loadRecentEmails(forceRefresh: forceRefresh)
+            }
+        }
+    }
+    
     // Gmail OAuth configuration
     private let clientID = GmailConfiguration.clientID
     private let clientSecret = GmailConfiguration.clientSecret
@@ -139,6 +152,28 @@ class GmailService: ObservableObject, GmailServiceProtocol {
     private let scope = GmailConfiguration.scopes.joined(separator: " ")
     
     private let baseURL = "https://www.googleapis.com/gmail/v1"
+    
+    // MARK: - Static Cleanup Utilities
+    
+    /// Immediately cleans up old UserDefaults cache without requiring app restart
+    /// Call this from settings or diagnostics
+    static func cleanupOldUserDefaultsCache() {
+        let oldCacheKey = "DiligenceCachedEmails"
+        
+        if let oldCachedData = UserDefaults.standard.data(forKey: oldCacheKey) {
+            let sizeInMB = Double(oldCachedData.count) / 1_048_576.0
+            print("🧹 IMMEDIATE CLEANUP: Removing old UserDefaults cache (\(String(format: "%.2f", sizeInMB)) MB)")
+            
+            UserDefaults.standard.removeObject(forKey: oldCacheKey)
+            UserDefaults.standard.synchronize() // Force immediate write
+            
+            print("✅ Old cache removed - UserDefaults violation fixed!")
+        } else {
+            print("ℹ️ No old UserDefaults cache found")
+        }
+    }
+    
+    // MARK: - Initialization
     
     init() {
         loadCredentialsFromKeychain()
@@ -157,24 +192,31 @@ class GmailService: ObservableObject, GmailServiceProtocol {
     }
     
     /// Migrates old UserDefaults-based cache to file-based cache
+    /// This runs immediately on init to fix the 5MB UserDefaults violation
     private func migrateOldCacheToFile() {
         let oldCacheKey = "DiligenceCachedEmails"
         
         // Check if old cache exists
-        guard let oldCachedData = UserDefaults.standard.data(forKey: oldCacheKey),
-              let oldCachedEmails = try? JSONDecoder().decode([ProcessedEmail].self, from: oldCachedData) else {
-            return
+        if let oldCachedData = UserDefaults.standard.data(forKey: oldCacheKey) {
+            let sizeInMB = Double(oldCachedData.count) / 1_048_576.0
+            print("📧 Found old UserDefaults cache (\(String(format: "%.2f", sizeInMB)) MB)")
+            
+            // Try to decode and migrate
+            if let oldCachedEmails = try? JSONDecoder().decode([ProcessedEmail].self, from: oldCachedData) {
+                print("📧 Migrating \(oldCachedEmails.count) emails from UserDefaults to file cache...")
+                saveEmailsToCache(oldCachedEmails)
+                print("📧 Migration successful - saved to file cache")
+            } else {
+                print("⚠️ Could not decode old cache, but will remove it anyway to fix UserDefaults violation")
+            }
+            
+            // ALWAYS remove old cache from UserDefaults, even if migration fails
+            // This is critical to fix the 5MB violation
+            UserDefaults.standard.removeObject(forKey: oldCacheKey)
+            UserDefaults.standard.synchronize() // Force immediate write
+            
+            print("✅ Removed old UserDefaults cache - UserDefaults violation fixed!")
         }
-        
-        print("📧 Migrating \(oldCachedEmails.count) emails from UserDefaults to file cache...")
-        
-        // Save to new file-based cache
-        saveEmailsToCache(oldCachedEmails)
-        
-        // Remove old cache from UserDefaults
-        UserDefaults.standard.removeObject(forKey: oldCacheKey)
-        
-        print("📧 Migration complete - removed old UserDefaults cache")
     }
     
     // MARK: - Authentication

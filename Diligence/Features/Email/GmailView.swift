@@ -182,14 +182,12 @@ struct GmailView: View {
     @State private var aiTaskError: String?
     @Query(sort: [SortDescriptor(\TaskSection.sortOrder)]) private var sections: [TaskSection]
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dependencyContainer) private var container
     
     var body: some View {
         NavigationSplitView(sidebar: {
             mainSidebarContent
-                .navigationSplitViewColumnWidth(min: 300, ideal: 400)
-                .toolbar {
-                    toolbarContent
-                }
+                .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 500)
         }, detail: {
             detailContent
         })
@@ -241,12 +239,6 @@ struct GmailView: View {
     @ViewBuilder
     private var authenticationView: some View {
         VStack(spacing: 16) {
-            HStack {
-                Spacer()
-                settingsButton
-            }
-            .padding(.top)
-            
             Text("Connect to Gmail")
                 .font(.title2)
                 .fontWeight(.medium)
@@ -301,37 +293,41 @@ struct GmailView: View {
     @ViewBuilder
     private var headerLeftSection: some View {
         HStack(spacing: 8) {
-            if !gmailService.emails.isEmpty {
-                selectAllButton
-            }
-            
             Text("Recent Emails")
                 .font(.title2)
                 .fontWeight(.medium)
+            
+            // AI Email Query button
+            if gmailService.isAuthenticated && UserDefaults.standard.llmFeatureEnabled {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showQueryInterface.toggle()
+                    }
+                }) {
+                    Image(systemName: showQueryInterface ? "brain.filled.head.profile" : "brain.head.profile")
+                        .foregroundColor(.accentColor)
+                        .font(.title2)
+                }
+                .buttonStyle(.plain)
+                .help("AI Email Query")
+            }
         }
     }
     
     @ViewBuilder
     private var headerRightSection: some View {
         HStack(spacing: 8) {
-            aiQueryButton
-            settingsButton
-            selectionControls
+            // Remove Selected button
+            if gmailService.isAuthenticated && !selectedEmails.isEmpty {
+                Button("Remove (\(selectedEmails.count))") {
+                    removeBatchEmails()
+                }
+                .foregroundColor(.red)
+                .buttonStyle(.borderless)
+            }
+            
             refreshButton
         }
-    }
-    
-    @ViewBuilder
-    private var selectAllButton: some View {
-        Button(action: toggleSelectAll) {
-            let iconName = selectedEmails.count == gmailService.emails.count ? "checkmark.circle.fill" : 
-                          selectedEmails.isEmpty ? "circle" : "minus.circle.fill"
-            Image(systemName: iconName)
-                .foregroundColor(selectedEmails.isEmpty ? .secondary : .accentColor)
-                .font(.title2)
-        }
-        .buttonStyle(.plain)
-        .help(selectedEmails.count == gmailService.emails.count ? "Deselect All" : "Select All")
     }
     
     @ViewBuilder
@@ -352,19 +348,6 @@ struct GmailView: View {
     }
     
     @ViewBuilder
-    private var settingsButton: some View {
-        Button(action: {
-            SettingsWindowController.openSettings()
-        }) {
-            Image(systemName: "gearshape")
-                .foregroundColor(.primary)
-                .font(.title2)
-        }
-        .buttonStyle(.plain)
-        .help("Settings")
-    }
-    
-    @ViewBuilder
     private var selectionControls: some View {
         if !gmailService.emails.isEmpty {
             HStack(spacing: 8) {
@@ -375,10 +358,6 @@ struct GmailView: View {
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)
-                    
-                    Text("(\(selectedEmails.count) selected)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
                 
                 Button(selectedEmails.count == gmailService.emails.count ? "Deselect All" : "Select All") {
@@ -615,29 +594,38 @@ struct GmailView: View {
         }
     }
     
-    // MARK: - Toolbar Content
+    // MARK: - Context Menu
     
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .destructiveAction) {
-            if gmailService.isAuthenticated {
-                Button("Remove Selected (\(selectedEmails.count))") {
-                    removeBatchEmails()
-                }
-                .foregroundColor(.red)
-                .disabled(selectedEmails.isEmpty)
+    @ViewBuilder
+    private func emailContextMenu(for email: ProcessedEmail) -> some View {
+        Button("AI Task") {
+            generateAITaskSuggestions(for: email)
+        }
+        
+        Button("Create Task") {
+            showCreateTaskView(for: email)
+        }
+        
+        Divider()
+        
+        Button("Select and View Email") {
+            selectedEmail = email
+        }
+        
+        Button("Open in Gmail") {
+            if let url = URL(string: email.gmailURL.absoluteString) {
+                NSWorkspace.shared.open(url)
             }
         }
         
-        ToolbarItem(placement: .automatic) {
-            if gmailService.isAuthenticated {
-                Button("Sign Out") {
-                    gmailService.signOut()
-                    selectedEmails.removeAll()
-                    selectedEmail = nil
-                }
-                .help("Sign Out of Gmail")
-            }
+        Divider()
+        
+        Button(selectedEmails.contains(email.id) ? "Deselect" : "Select") {
+            toggleEmailSelection(email)
+        }
+        
+        Button("Remove", role: .destructive) {
+            removeEmailFromList(email)
         }
     }
     
@@ -682,41 +670,6 @@ struct GmailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-    
-    // MARK: - Context Menu
-    
-    @ViewBuilder
-    private func emailContextMenu(for email: ProcessedEmail) -> some View {
-        Button("AI Task") {
-            generateAITaskSuggestions(for: email)
-        }
-        
-        Button("Create Task") {
-            showCreateTaskView(for: email)
-        }
-        
-        Divider()
-        
-        Button("Select and View Email") {
-            selectedEmail = email
-        }
-        
-        Button("Open in Gmail") {
-            if let url = URL(string: email.gmailURL.absoluteString) {
-                NSWorkspace.shared.open(url)
-            }
-        }
-        
-        Divider()
-        
-        Button(selectedEmails.contains(email.id) ? "Deselect" : "Select") {
-            toggleEmailSelection(email)
-        }
-        
-        Button("Remove", role: .destructive) {
-            removeEmailFromList(email)
-        }
     }
     
     // MARK: - Helper Methods
@@ -765,12 +718,16 @@ struct GmailView: View {
             do {
                 print("🤖 Starting AI task generation for email: \(email.subject)")
                 
-                // Create AI services for this operation
-                let aiService = EnhancedAIEmailService()
-                await aiService.initialize()
+                // Use the shared AI service from DependencyContainer
+                guard let aiService = container.enhancedAIService else {
+                    throw NSError(domain: "GmailView", code: -1, userInfo: [
+                        NSLocalizedDescriptionKey: "AI service not available. Please restart the app."
+                    ])
+                }
+                
                 let aiTaskService = AITaskService(aiService: aiService, gmailService: gmailService)
-                print("DEBUG: The type of aiService is: \(type(of: aiService))")
-                       print("DEBUG: The type of gmailService is: \(type(of: gmailService))")
+                print("🔗 Using shared Enhanced AI Email Service (already initialized at launch)")
+                
                 // Generate suggestions using the AI service
                 let suggestions = try await aiTaskService.createAITaskSuggestions(
                     for: email,
@@ -1030,7 +987,6 @@ struct EmailDetailView: View {
     @State private var taskDescription: String = ""
     @State private var dueDate: Date = Date().addingTimeInterval(86400) // Default to tomorrow
     @State private var hasDueDate: Bool = false
-    @State private var taskAmount: String = "" // Add amount field
     
     private var formattedTime: String {
         let formatter = DateFormatter()
@@ -1074,36 +1030,53 @@ struct EmailDetailView: View {
                 
                 Divider()
                 
-                // Email body
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Email Content")
-                        .font(.headline)
+                // Actions
+                HStack(spacing: 16) {
+                    // AI Task button
+                    Button(action: {
+                        onGenerateAITasks()
+                    }) {
+                        HStack(spacing: 6) {
+                            if isGeneratingAITasks {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "brain.head.profile")
+                            }
+                            Text("AI Task")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isGeneratingAITasks)
+                    .help("Generate intelligent task suggestions using AI")
                     
-                    RTFTextView(htmlContent: email.body.isEmpty ? email.snippet : email.body)
-                        .font(.body)
-                        .padding(16)
-                        .background(Color(NSColor.textBackgroundColor))
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
-                        )
+                    Button("Create Task") {
+                        startTaskCreation()
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Button("Open in Gmail") {
+                        NSWorkspace.shared.open(email.gmailURL)
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Spacer()
+                    
+                    Button("Remove") {
+                        removeEmail()
+                    }
+                    .buttonStyle(.bordered)
+                    .foregroundColor(.red)
                 }
                 
-                // Attachments section
-                if !email.attachments.isEmpty {
-                    Divider()
-                    
-                    AttachmentsListView(attachments: email.attachments, gmailService: gmailService)
-                }
+                // AI Task error display
+                aiTaskErrorView
                 
-                // Task Creation Section
+                // Task Creation Section (moved here from bottom)
                 if showTaskCreation {
-                    Divider()
-                    
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
-                            Text("Create Task from This Email")
+                            Text("Create Task")
                                 .font(.title2)
                                 .fontWeight(.medium)
                             
@@ -1134,31 +1107,6 @@ struct EmailDetailView: View {
                                         RoundedRectangle(cornerRadius: 6)
                                             .stroke(Color(NSColor.separatorColor), lineWidth: 1)
                                     )
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Amount (optional)")
-                                    .font(.headline)
-                                HStack(spacing: 8) {
-                                    Text("$")
-                                        .font(.headline)
-                                        .foregroundColor(.secondary)
-                                    
-                                    TextField("0.00", text: $taskAmount)
-                                        .textFieldStyle(.roundedBorder)
-                                }
-                                
-                                if !taskAmount.isEmpty, let amountValue = Double(taskAmount.replacingOccurrences(of: ",", with: "")) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "dollarsign.circle")
-                                            .foregroundColor(.green)
-                                            .font(.caption)
-                                        
-                                        Text("Amount: $\(formatAmountWithCommas(amountValue))")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
                             }
                             
                             VStack(alignment: .leading, spacing: 8) {
@@ -1192,52 +1140,36 @@ struct EmailDetailView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
                     )
-                } else {
-                    // Actions
-                    HStack(spacing: 16) {
-                        // AI Task button
-                        Button(action: {
-                            onGenerateAITasks()
-                        }) {
-                            HStack(spacing: 6) {
-                                if isGeneratingAITasks {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                } else {
-                                    Image(systemName: "brain.head.profile")
-                                }
-                                Text("AI Task")
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isGeneratingAITasks)
-                        .help("Generate intelligent task suggestions using AI")
-                        
-                        Button("Create Task from This Email") {
-                            startTaskCreation()
-                        }
-                        .buttonStyle(.bordered)
-                        
-                        Button("Open in Gmail") {
-                            NSWorkspace.shared.open(email.gmailURL)
-                        }
-                        .buttonStyle(.bordered)
-                        
-                        Spacer()
-                        
-                        Button("Remove") {
-                            removeEmail()
-                        }
-                        .buttonStyle(.bordered)
-                        .foregroundColor(.red)
-                    }
-                    .padding(.top)
+                }
+                
+                Divider()
+                
+                // Email body
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Email Content")
+                        .font(.headline)
                     
-                    // AI Task error display
-                    aiTaskErrorView
+                    RTFTextView(htmlContent: email.body.isEmpty ? email.snippet : email.body)
+                        .font(.body)
+                        .padding(16)
+                        .background(Color(NSColor.textBackgroundColor))
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
+                        )
+                }
+                
+                // Attachments section
+                if !email.attachments.isEmpty {
+                    Divider()
+                    
+                    AttachmentsListView(attachments: email.attachments, gmailService: gmailService)
                 }
             }
-            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24) // Balanced horizontal padding
+            .padding(.vertical, 16)   // Comfortable vertical padding
         }
         .navigationTitle("Email Details")
         .onAppear {
@@ -1293,8 +1225,6 @@ struct EmailDetailView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(Color.orange.opacity(0.3), lineWidth: 1)
             )
-            .padding(.horizontal)
-            .padding(.bottom, 8)
         }
     }
     
@@ -1311,7 +1241,6 @@ struct EmailDetailView: View {
         showTaskCreation = false
         taskTitle = email.subject // Reset to original
         taskDescription = ""
-        taskAmount = "" // Reset amount
         hasDueDate = false
         dueDate = Date().addingTimeInterval(86400)
     }
@@ -1332,11 +1261,6 @@ struct EmailDetailView: View {
             gmailURL: email.gmailURL.absoluteString
         )
         
-        // Set amount if provided
-        if !taskAmount.isEmpty, let amountValue = Double(taskAmount.replacingOccurrences(of: ",", with: "")) {
-            newTask.amount = amountValue
-        }
-        
         modelContext.insert(newTask)
         
         do {
@@ -1345,22 +1269,11 @@ struct EmailDetailView: View {
             showTaskCreation = false
             taskTitle = email.subject // Reset to original
             taskDescription = ""
-            taskAmount = "" // Reset amount
             hasDueDate = false
             dueDate = Date().addingTimeInterval(86400)
         } catch {
             print("Failed to save task: \(error)")
         }
-    }
-    
-    private func formatAmountWithCommas(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        formatter.groupingSeparator = ","
-        formatter.groupingSize = 3
-        return formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
     }
     
     private func removeEmail() {

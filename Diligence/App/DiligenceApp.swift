@@ -170,17 +170,12 @@ struct DiligenceApp: App {
                         )
                     }
                     
-                    // Initialize LLM service and detect current model
-                    do {
-                        let llmService = container.llmService
-                        await llmService?.initialize()
-                    } catch {
-                        handleError(
-                            error,
-                            context: ErrorContext(operation: "Initializing LLM service"),
-                            shouldPresent: false // Silent failure for optional service
-                        )
-                    }
+                    // Initialize LLM services at app launch
+                    async let llmInit: () = initializeLLMService()
+                    async let enhancedAIInit: () = initializeEnhancedAIService()
+                    
+                    await llmInit
+                    await enhancedAIInit
                 }
         })
         .modelContainer(sharedModelContainer)
@@ -214,5 +209,47 @@ struct DiligenceApp: App {
             context: context,
             shouldPresent: shouldPresent
         )
+    }
+    
+    // MARK: - LLM Initialization
+    
+    /// Initialize the base LLM service
+    private func initializeLLMService() async {
+        do {
+            print("🤖 Initializing LLM Service at app launch...")
+            let llmService = container.llmService
+            await llmService?.initialize()
+            print("✅ LLM Service initialized successfully")
+        } catch {
+            print("⚠️ LLM Service initialization encountered an error: \(error)")
+            handleError(
+                error,
+                context: ErrorContext(operation: "Initializing LLM service"),
+                shouldPresent: false // Silent failure for optional service
+            )
+        }
+    }
+    
+    /// Initialize the enhanced AI email service (Apple Intelligence + Jan.ai)
+    private func initializeEnhancedAIService() async {
+        do {
+            print("🤖 Initializing Enhanced AI Email Service at app launch...")
+            let enhancedAIService = container.enhancedAIService
+            await enhancedAIService?.initialize()
+            print("✅ Enhanced AI Email Service initialized successfully")
+            
+            // Log available providers
+            if let service = enhancedAIService {
+                print("📋 Available AI providers: \(service.availableProviders.map { $0.displayName }.joined(separator: ", "))")
+                print("🎯 Selected provider: \(service.selectedProvider.displayName)")
+            }
+        } catch {
+            print("⚠️ Enhanced AI Email Service initialization encountered an error: \(error)")
+            handleError(
+                error,
+                context: ErrorContext(operation: "Initializing Enhanced AI Email service"),
+                shouldPresent: false // Silent failure for optional service
+            )
+        }
     }
 }

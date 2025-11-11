@@ -763,7 +763,7 @@ struct TaskRowView: View {
                             .foregroundColor(.green)
                             .font(.caption)
                         
-                        Text("$\(String(format: "%.2f", amount))")
+                        Text("$\(formatAmountWithCommas(amount))")
                             .font(.caption)
                             .foregroundColor(.green)
                             .fontWeight(.medium)
@@ -899,6 +899,16 @@ struct TaskRowView: View {
             // Remove the task from context if save failed
             modelContext.delete(duplicatedTask)
         }
+    }
+    
+    private func formatAmountWithCommas(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        formatter.groupingSeparator = ","
+        formatter.groupingSize = 3
+        return formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
     }
 }
 

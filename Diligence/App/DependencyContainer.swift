@@ -15,12 +15,14 @@ class DependencyContainer: ObservableObject {
     
     private(set) var recurringTaskService: RecurringTaskService!
     private(set) var llmService: LLMService!
+    private(set) var enhancedAIService: EnhancedAIEmailService!
     
     private init() {}
     
     func configure(modelContext: ModelContext) {
         self.recurringTaskService = RecurringTaskService(modelContext: modelContext)
         self.llmService = LLMService()
+        self.enhancedAIService = EnhancedAIEmailService()
     }
 }
 

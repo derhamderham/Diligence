@@ -75,6 +75,20 @@ struct AdvancedSettingsView: View {
                         .controlSize(.mini)
                     }
                 }
+                
+                // Old cache cleanup warning
+                if hasOldUserDefaultsCache() {
+                    ModernSettingsRow(
+                        title: "⚠️ Old cache detected",
+                        description: "Found old email cache in UserDefaults (\(getOldCacheSize())). This should be migrated to file storage."
+                    ) {
+                        Button("Clean Up") {
+                            cleanupOldUserDefaultsCache()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.mini)
+                    }
+                }
             }
             
             ModernSettingsSection(title: "Database") {
@@ -209,6 +223,25 @@ struct AdvancedSettingsView: View {
     }
     
     // MARK: - Helper Methods
+    
+    private func hasOldUserDefaultsCache() -> Bool {
+        return UserDefaults.standard.data(forKey: "DiligenceCachedEmails") != nil
+    }
+    
+    private func getOldCacheSize() -> String {
+        guard let data = UserDefaults.standard.data(forKey: "DiligenceCachedEmails") else {
+            return "0 bytes"
+        }
+        return ByteCountFormatter().string(fromByteCount: Int64(data.count))
+    }
+    
+    private func cleanupOldUserDefaultsCache() {
+        // Call the immediate cleanup function
+        GmailService.cleanupOldUserDefaultsCache()
+        
+        // Refresh the cache size display
+        calculateCacheSize()
+    }
     
     private func calculateCacheSize() {
         _Concurrency.Task {
