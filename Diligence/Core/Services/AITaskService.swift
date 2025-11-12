@@ -38,7 +38,7 @@ enum AppRecurrencePattern: String, CaseIterable, Codable {
     case custom
 }
 
-enum TaskPriority: String, Codable, CaseIterable {
+enum AITaskPriority: String, Codable, CaseIterable {
     case low
     case medium
     case high
@@ -79,7 +79,7 @@ struct AITaskSuggestion: Codable, Identifiable {
     var section: String?
     var tags: [String]
     var amount: Double?
-    var priority: TaskPriority?
+    var priority: AITaskPriority?
     var isRecurring: Bool?
     var recurrencePattern: String? // "monthly", "weekly", etc.
 
@@ -92,7 +92,7 @@ struct AITaskSuggestion: Codable, Identifiable {
         section: String? = nil,
         tags: [String] = [],
         amount: Double? = nil,
-        priority: TaskPriority? = nil,
+        priority: AITaskPriority? = nil,
         isRecurring: Bool? = nil,
         recurrencePattern: String? = nil
     ) {
@@ -131,7 +131,7 @@ struct AITaskSuggestion: Codable, Identifiable {
         self.section = try c.decodeIfPresent(String.self, forKey: .section)
         self.tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         self.amount = try c.decodeIfPresent(Double.self, forKey: .amount)
-        self.priority = try c.decodeIfPresent(TaskPriority.self, forKey: .priority)
+        self.priority = try c.decodeIfPresent(AITaskPriority.self, forKey: .priority)
         self.isRecurring = try c.decodeIfPresent(Bool.self, forKey: .isRecurring)
         self.recurrencePattern = try c.decodeIfPresent(String.self, forKey: .recurrencePattern)
     }

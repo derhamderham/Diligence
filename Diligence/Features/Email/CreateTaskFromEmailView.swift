@@ -21,6 +21,7 @@ struct CreateTaskFromEmailView: View {
     @State private var dueDate: Date = Date().addingTimeInterval(86400) // Default to tomorrow
     @State private var hasDueDate: Bool = false
     @State private var selectedSectionID: String? = nil
+    @State private var priority: TaskPriority = .medium
     
     // Recurrence properties
     @State private var recurrencePattern: RecurrencePattern = .never
@@ -69,6 +70,11 @@ struct CreateTaskFromEmailView: View {
                             TextEditor(text: $taskDescription)
                                 .frame(minHeight: 100, maxHeight: 150)
                                 .border(Color.gray.opacity(0.3), width: 1)
+                        }
+                        
+                        // Priority Picker
+                        VStack(alignment: .leading, spacing: 8) {
+                            PriorityPicker(selection: $priority, style: .buttons, showNone: false)
                         }
                         
                         Toggle("Set Due Date", isOn: $hasDueDate)
@@ -180,6 +186,7 @@ struct CreateTaskFromEmailView: View {
             emailSender: email.sender,
             gmailURL: email.gmailURL.absoluteString,
             sectionID: selectedSectionID,  // Assign to selected section
+            priority: priority,
             recurrencePattern: hasDueDate ? recurrencePattern : .never,
             recurrenceInterval: recurrenceInterval,
             recurrenceEndType: recurrenceEndType,

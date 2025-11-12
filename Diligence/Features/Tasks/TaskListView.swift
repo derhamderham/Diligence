@@ -689,6 +689,9 @@ struct TaskRowView: View {
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
+            // Priority indicator (visual accent)
+            PriorityIndicator(priority: task.priority, showAccentBar: false)
+            
             // Completion toggle
             Button(action: onToggleCompletion) {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
@@ -925,6 +928,7 @@ struct TaskDetailView: View {
     @State private var editedSectionID: String? = nil
     @State private var editedAmount: String = ""
     @State private var editedHasAmount: Bool = false
+    @State private var editedPriority: TaskPriority = .medium
     
     // DateFormatter for created date: HH:mm:ss dd-MMM-yy
     private static let createdDateFormatter: DateFormatter = {
@@ -1061,6 +1065,20 @@ struct TaskDetailView: View {
                                 .foregroundColor(.secondary)
                                 .italic()
                         }
+                    }
+                }
+                
+                Divider()
+                
+                // Priority section
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Priority")
+                        .font(.headline)
+                    
+                    if isEditing {
+                        PriorityPicker(selection: $editedPriority, style: .buttons, showNone: false)
+                    } else {
+                        PriorityBadge(priority: task.priority, style: .full)
                     }
                 }
                 
@@ -1236,6 +1254,7 @@ struct TaskDetailView: View {
         editedDescription = task.taskDescription
         editedHasDueDate = task.dueDate != nil
         editedSectionID = task.sectionID
+        editedPriority = task.priority
         if let dueDate = task.dueDate {
             editedDueDate = dueDate
         }
@@ -1262,6 +1281,7 @@ struct TaskDetailView: View {
         task.taskDescription = editedDescription
         task.dueDate = editedHasDueDate ? editedDueDate : nil
         task.sectionID = editedSectionID
+        task.priority = editedPriority
         
         // Save amount for bills/invoices (no toggle needed)
         if !editedAmount.isEmpty, let amountValue = Double(editedAmount.replacingOccurrences(of: ",", with: "")) {
@@ -1300,6 +1320,7 @@ struct CreateTaskView: View {
     @State private var dueDate: Date = Date().addingTimeInterval(86400) // Tomorrow
     @State private var hasDueDate: Bool = false
     @State private var selectedSectionID: String? = nil
+    @State private var priority: TaskPriority = .medium
     
     // Recurrence properties
     @State private var recurrencePattern: RecurrencePattern = .never
@@ -1346,6 +1367,11 @@ struct CreateTaskView: View {
                             TextEditor(text: $description)
                                 .frame(minHeight: 100, maxHeight: 200)
                                 .border(Color.gray.opacity(0.3), width: 1)
+                        }
+                        
+                        // Priority selection
+                        VStack(alignment: .leading, spacing: 8) {
+                            PriorityPicker(selection: $priority, style: .buttons, showNone: false)
                         }
                         
                         // Section selection
@@ -1415,6 +1441,8 @@ struct CreateTaskView: View {
             title: trimmedTitle,
             taskDescription: description,
             dueDate: hasDueDate ? dueDate : nil,
+            sectionID: selectedSectionID,
+            priority: priority,
             recurrencePattern: hasDueDate ? recurrencePattern : .never,
             recurrenceInterval: recurrenceInterval,
             recurrenceEndType: recurrenceEndType,
@@ -1428,9 +1456,6 @@ struct CreateTaskView: View {
         } else if recurrencePattern == .weekdays {
             newTask.recurrenceWeekdays = [2, 3, 4, 5, 6] // Monday through Friday
         }
-        
-        // Assign to selected section
-        newTask.sectionID = selectedSectionID
         
         modelContext.insert(newTask)
         
@@ -1470,6 +1495,7 @@ struct CreateTaskDetailView: View {
     @State private var selectedSectionID: String? = nil
     @State private var amount: String = ""
     @State private var hasAmount: Bool = false
+    @State private var priority: TaskPriority = .medium
     
     // Recurrence properties
     @State private var recurrencePattern: RecurrencePattern = .never
@@ -1542,6 +1568,11 @@ struct CreateTaskDetailView: View {
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                         )
+                }
+                
+                // Priority section
+                VStack(alignment: .leading, spacing: 8) {
+                    PriorityPicker(selection: $priority, style: .buttons, showNone: false)
                 }
                 
                 // Section selection
@@ -1681,6 +1712,7 @@ struct CreateTaskDetailView: View {
         selectedSectionID = nil
         amount = ""
         hasAmount = false
+        priority = .medium
         
         // Reset recurrence settings
         recurrencePattern = .never
@@ -1709,6 +1741,8 @@ struct CreateTaskDetailView: View {
             title: trimmedTitle,
             taskDescription: description,
             dueDate: hasDueDate ? dueDate : nil,
+            sectionID: selectedSectionID,
+            priority: priority,
             recurrencePattern: hasDueDate ? recurrencePattern : .never,
             recurrenceInterval: recurrenceInterval,
             recurrenceEndType: recurrenceEndType,
@@ -1722,9 +1756,6 @@ struct CreateTaskDetailView: View {
         } else if recurrencePattern == .weekdays {
             newTask.recurrenceWeekdays = [2, 3, 4, 5, 6] // Monday through Friday
         }
-        
-        // Assign to selected section
-        newTask.sectionID = selectedSectionID
         
         // Set amount for bills/invoices (no toggle needed)
         if !amount.isEmpty, let amountValue = Double(amount.replacingOccurrences(of: ",", with: "")) {

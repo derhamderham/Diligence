@@ -124,6 +124,14 @@ final class DiligenceTask {
     /// Monetary amount associated with the task (for bills, invoices, etc.)
     var amount: Double?
     
+    // MARK: - Priority Properties
+    
+    /// Priority level for the task
+    ///
+    /// Use priority to organize and distinguish important tasks.
+    /// Defaults to `.medium` for new tasks.
+    var priorityRawValue: Int = DiligenceTaskPriority.medium.rawValue
+    
     // MARK: - Recurrence Properties
     
     /// The pattern defining how this task repeats
@@ -203,6 +211,7 @@ final class DiligenceTask {
     ///   - reminderID: EventKit reminder ID for sync
     ///   - sectionID: Section this task belongs to
     ///   - amount: Financial amount for the task
+    ///   - priority: Priority level for the task (defaults to `.medium`)
     ///   - recurrencePattern: How the task repeats
     ///   - recurrenceInterval: Interval multiplier for recurrence
     ///   - recurrenceEndType: How recurrence should end
@@ -224,6 +233,7 @@ final class DiligenceTask {
          reminderID: String? = nil,
          sectionID: String? = nil,
          amount: Double? = nil,
+         priority: DiligenceTaskPriority = .medium,
          recurrencePattern: RecurrencePattern = RecurrencePattern.never,
          recurrenceInterval: Int = 1,
          recurrenceEndType: RecurrenceEndType = RecurrenceEndType.never,
@@ -245,6 +255,7 @@ final class DiligenceTask {
         self.reminderID = reminderID
         self.sectionID = sectionID
         self.amount = amount
+        self.priorityRawValue = priority.rawValue
         self.recurrencePattern = recurrencePattern
         self.recurrenceInterval = recurrenceInterval
         self.recurrenceEndType = recurrenceEndType
@@ -259,6 +270,19 @@ final class DiligenceTask {
     }
     
     // MARK: - Computed Properties
+    
+    /// Priority level for the task
+    ///
+    /// This computed property provides type-safe access to the priority,
+    /// falling back to `.medium` if the stored raw value is invalid.
+    var priority: DiligenceTaskPriority {
+        get {
+            return DiligenceTaskPriority(rawValue: priorityRawValue) ?? .medium
+        }
+        set {
+            priorityRawValue = newValue.rawValue
+        }
+    }
     
     /// Returns `true` if this task was created from a Gmail email
     var isFromEmail: Bool {
@@ -491,6 +515,7 @@ final class DiligenceTask {
                     emailSender: emailSender,
                     gmailURL: gmailURL,
                     sectionID: sectionID,
+                    priority: priority,  // Inherit priority from parent task
                     parentRecurringTaskID: title + "_" + createdDate.timeIntervalSince1970.description,
                     isRecurringInstance: true,
                     recurringInstanceDate: nextDate

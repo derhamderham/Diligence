@@ -219,7 +219,7 @@ struct AITaskSuggestionsView: View {
     private func selectAllByDefault() {
         // Auto-select suggestions that have clear due dates or high priority
         for suggestion in suggestions {
-            if suggestion.dueDate != nil || suggestion.priority == .high || suggestion.priority == .urgent {
+            if suggestion.dueDate != nil || suggestion.priority == .high {
                 selectedSuggestions.insert(suggestion.id)
             }
         }
@@ -308,7 +308,7 @@ struct EditableTaskSuggestion {
     var sectionID: String?
     var tags: [String]
     var amount: Double?
-    var priority: TaskPriority?
+    var priority: DiligenceTaskPriority?
     var isRecurring: Bool
     var recurrencePattern: String?
     
@@ -319,9 +319,22 @@ struct EditableTaskSuggestion {
         self.sectionID = nil // Will be set based on section matching
         self.tags = suggestion.tags
         self.amount = suggestion.amount
-        self.priority = suggestion.priority
+        self.priority = convertAIPriorityToTaskPriority(suggestion.priority)
         self.isRecurring = suggestion.isRecurring ?? false
         self.recurrencePattern = suggestion.recurrencePattern
+    }
+}
+
+// Helper function to convert AITaskPriority to DiligenceTaskPriority
+private func convertAIPriorityToTaskPriority(_ aiPriority: AITaskPriority?) -> DiligenceTaskPriority? {
+    guard let aiPriority = aiPriority else { return nil }
+    switch aiPriority {
+    case .low:
+        return .low
+    case .medium:
+        return .medium
+    case .high, .urgent: // Map both high and urgent to high
+        return .high
     }
 }
 
@@ -441,17 +454,9 @@ struct AITaskSuggestionRow: View {
         }
     }
     
-    private func priorityBadge(_ priority: TaskPriority) -> some View {
-        let color: Color = {
-            switch priority {
-            case .low: return .gray
-            case .medium: return .yellow
-            case .high: return .orange
-            case .urgent: return .red
-            }
-        }()
-        
-        return Badge(text: priority.displayName, color: color)
+    private func priorityBadge(_ priority: DiligenceTaskPriority) -> some View {
+        // Use the priority's built-in color property
+        return Badge(text: priority.displayName, color: priority.color)
     }
     
     private var taskMetadata: some View {

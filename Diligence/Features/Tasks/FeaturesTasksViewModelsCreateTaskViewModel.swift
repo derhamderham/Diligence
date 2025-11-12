@@ -34,6 +34,7 @@ final class CreateTaskViewModel: ObservableObject {
     @Published var selectedSectionID: String? = nil
     @Published var hasAmount: Bool = false
     @Published var amount: String = ""
+    @Published var priority: TaskPriority = .medium
     
     /// Recurrence fields
     @Published var recurrencePattern: RecurrencePattern = .never
@@ -130,6 +131,7 @@ final class CreateTaskViewModel: ObservableObject {
             gmailURL: gmailURL,
             sectionID: selectedSectionID,
             amount: parsedAmount,
+            priority: priority,
             recurrencePattern: recurrencePattern,
             recurrenceInterval: recurrenceInterval,
             recurrenceEndType: recurrenceEndType,
@@ -172,6 +174,7 @@ final class CreateTaskViewModel: ObservableObject {
         selectedSectionID = nil
         hasAmount = false
         amount = ""
+        priority = .medium
         recurrencePattern = .never
         recurrenceInterval = 1
         recurrenceEndType = .never
