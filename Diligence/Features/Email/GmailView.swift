@@ -51,6 +51,7 @@ struct RTFTextView: View {
                     .textSelection(.enabled)
                     .lineSpacing(4)
                     .foregroundColor(.primary)
+                    .multilineTextAlignment(.leading)
             } else {
                 // Plain text content - preserve line breaks and formatting
                 Text(htmlContent.formatPlainText())
@@ -190,7 +191,9 @@ struct GmailView: View {
                 .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 500)
         }, detail: {
             detailContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         })
+        .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $showingAITaskSuggestions) {
             if let email = selectedEmail {
                 AITaskSuggestionsView(
@@ -725,8 +728,34 @@ struct GmailView: View {
                     ])
                 }
                 
+                // Wait for initialization to complete if still initializing
+                if aiService.isInitializing {
+                    print("⏳ AI service is still initializing, waiting...")
+                    // Wait up to 5 seconds for initialization
+                    var waitCount = 0
+                    while aiService.isInitializing && waitCount < 50 {
+                        try await _Concurrency.Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                        waitCount += 1
+                    }
+                    
+                    if aiService.isInitializing {
+                        throw NSError(domain: "GmailView", code: -1, userInfo: [
+                            NSLocalizedDescriptionKey: "AI service is taking too long to initialize. Please try again."
+                        ])
+                    }
+                    
+                    print("✅ AI service initialization complete")
+                }
+                
+                // Check if any AI service is available
+                if !aiService.hasAvailableService {
+                    throw NSError(domain: "GmailView", code: -1, userInfo: [
+                        NSLocalizedDescriptionKey: "No AI services are currently available. Please ensure Apple Intelligence is enabled or Jan.ai is running."
+                    ])
+                }
+                
                 let aiTaskService = AITaskService(aiService: aiService, gmailService: gmailService)
-                print("🔗 Using shared Enhanced AI Email Service (already initialized at launch)")
+                print("🔗 Using shared Enhanced AI Email Service with provider: \(aiService.selectedProvider.displayName)")
                 
                 // Generate suggestions using the AI service
                 let suggestions = try await aiTaskService.createAITaskSuggestions(
@@ -1003,162 +1032,25 @@ struct EmailDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 // Email header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(email.subject)
-                        .font(.title)
-                        .fontWeight(.medium)
-                    
-                    HStack {
-                        Text("From: \(email.sender)")
-                            .font(.subheadline)
-                        
-                        Spacer()
-                        
-                        HStack(spacing: 4) {
-                            Text(formattedTime)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(formattedDate)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .padding()
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(8)
+                emailHeaderSection
                 
                 Divider()
                 
                 // Actions
-                HStack(spacing: 16) {
-                    // AI Task button
-                    Button(action: {
-                        onGenerateAITasks()
-                    }) {
-                        HStack(spacing: 6) {
-                            if isGeneratingAITasks {
-                                ProgressView()
-                                    .controlSize(.small)
-                            } else {
-                                Image(systemName: "brain.head.profile")
-                            }
-                            Text("AI Task")
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isGeneratingAITasks)
-                    .help("Generate intelligent task suggestions using AI")
-                    
-                    Button("Create Task") {
-                        startTaskCreation()
-                    }
-                    .buttonStyle(.bordered)
-                    
-                    Button("Open in Gmail") {
-                        NSWorkspace.shared.open(email.gmailURL)
-                    }
-                    .buttonStyle(.bordered)
-                    
-                    Spacer()
-                    
-                    Button("Remove") {
-                        removeEmail()
-                    }
-                    .buttonStyle(.bordered)
-                    .foregroundColor(.red)
-                }
+                actionButtonsSection
                 
                 // AI Task error display
                 aiTaskErrorView
                 
-                // Task Creation Section (moved here from bottom)
+                // Task Creation Section
                 if showTaskCreation {
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Text("Create Task")
-                                .font(.title2)
-                                .fontWeight(.medium)
-                            
-                            Spacer()
-                            
-                            Button("Cancel") {
-                                cancelTaskCreation()
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Task Title")
-                                    .font(.headline)
-                                TextField("Enter task title", text: $taskTitle)
-                                    .textFieldStyle(.roundedBorder)
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Description (optional)")
-                                    .font(.headline)
-                                TextEditor(text: $taskDescription)
-                                    .frame(minHeight: 80, maxHeight: 120)
-                                    .padding(4)
-                                    .background(Color(NSColor.textBackgroundColor))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color(NSColor.separatorColor), lineWidth: 1)
-                                    )
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 8) {
-                                Toggle("Set Due Date", isOn: $hasDueDate)
-                                    .toggleStyle(.switch)
-                                
-                                if hasDueDate {
-                                    DatePicker("Due Date", selection: $dueDate, displayedComponents: [.date, .hourAndMinute])
-                                        .datePickerStyle(.field)
-                                }
-                            }
-                        }
-                        
-                        HStack(spacing: 12) {
-                            Button("Create Task") {
-                                createTaskFromEmail()
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            
-                            Button("Cancel") {
-                                cancelTaskCreation()
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                    }
-                    .padding()
-                    .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
-                    )
+                    taskCreationSection
                 }
                 
                 Divider()
                 
                 // Email body
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Email Content")
-                        .font(.headline)
-                    
-                    RTFTextView(htmlContent: email.body.isEmpty ? email.snippet : email.body)
-                        .font(.body)
-                        .padding(16)
-                        .background(Color(NSColor.textBackgroundColor))
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
-                        )
-                }
+                emailBodySection
                 
                 // Attachments section
                 if !email.attachments.isEmpty {
@@ -1167,10 +1059,11 @@ struct EmailDetailView: View {
                     AttachmentsListView(attachments: email.attachments, gmailService: gmailService)
                 }
             }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24) // Balanced horizontal padding
-            .padding(.vertical, 16)   // Comfortable vertical padding
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationTitle("Email Details")
         .onAppear {
             // Pre-populate task title when view appears
@@ -1189,6 +1082,174 @@ struct EmailDetailView: View {
                     taskTitle = email.subject
                 }
             }
+        }
+    }
+    
+    // MARK: - Email Header Section
+    
+    @ViewBuilder
+    private var emailHeaderSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(email.subject)
+                .font(.title)
+                .fontWeight(.medium)
+            
+            HStack {
+                Text("From: \(email.sender)")
+                    .font(.subheadline)
+                
+                Spacer()
+                
+                HStack(spacing: 4) {
+                    Text(formattedTime)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(formattedDate)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(8)
+    }
+    
+    // MARK: - Action Buttons Section
+    
+    @ViewBuilder
+    private var actionButtonsSection: some View {
+        HStack(spacing: 16) {
+            // AI Task button
+            Button(action: {
+                onGenerateAITasks()
+            }) {
+                HStack(spacing: 6) {
+                    if isGeneratingAITasks {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "brain.head.profile")
+                    }
+                    Text("AI Task")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isGeneratingAITasks)
+            .help("Generate intelligent task suggestions using AI")
+            
+            Button("Create Task") {
+                startTaskCreation()
+            }
+            .buttonStyle(.bordered)
+            
+            Button("Open in Gmail") {
+                NSWorkspace.shared.open(email.gmailURL)
+            }
+            .buttonStyle(.bordered)
+            
+            Spacer()
+            
+            Button("Remove") {
+                removeEmail()
+            }
+            .buttonStyle(.bordered)
+            .foregroundColor(.red)
+        }
+    }
+    
+    // MARK: - Task Creation Section
+    
+    @ViewBuilder
+    private var taskCreationSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Create Task")
+                    .font(.title2)
+                    .fontWeight(.medium)
+                
+                Spacer()
+                
+                Button("Cancel") {
+                    cancelTaskCreation()
+                }
+                .buttonStyle(.borderless)
+            }
+            
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Task Title")
+                        .font(.headline)
+                    TextField("Enter task title", text: $taskTitle)
+                        .textFieldStyle(.roundedBorder)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Description (optional)")
+                        .font(.headline)
+                    TextEditor(text: $taskDescription)
+                        .frame(minHeight: 80, maxHeight: 120)
+                        .padding(4)
+                        .background(Color(NSColor.textBackgroundColor))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+                        )
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Set Due Date", isOn: $hasDueDate)
+                        .toggleStyle(.switch)
+                    
+                    if hasDueDate {
+                        DatePicker("Due Date", selection: $dueDate, displayedComponents: [.date, .hourAndMinute])
+                            .datePickerStyle(.field)
+                    }
+                }
+            }
+            
+            HStack(spacing: 12) {
+                Button("Create Task") {
+                    createTaskFromEmail()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                
+                Button("Cancel") {
+                    cancelTaskCreation()
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    // MARK: - Email Body Section
+    
+    @ViewBuilder
+    private var emailBodySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Email Content")
+                .font(.headline)
+            
+            RTFTextView(htmlContent: email.body.isEmpty ? email.snippet : email.body)
+                .font(.body)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(NSColor.textBackgroundColor))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
+                )
         }
     }
     
@@ -1218,7 +1279,8 @@ struct EmailDetailView: View {
                 }
                 .buttonStyle(.borderless)
             }
-            .padding()
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.orange.opacity(0.1))
             .cornerRadius(8)
             .overlay(
@@ -1228,6 +1290,7 @@ struct EmailDetailView: View {
         }
     }
     
+    // MARK: - Helper Methods
     
     private func startTaskCreation() {
         showTaskCreation = true
@@ -1530,3 +1593,4 @@ struct EmailQueryInterface: View {
 #Preview {
     GmailView()
 }
+

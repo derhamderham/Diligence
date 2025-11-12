@@ -22,6 +22,7 @@ struct CreateTaskFromEmailView: View {
     @State private var hasDueDate: Bool = false
     @State private var selectedSectionID: String? = nil
     @State private var priority: TaskPriority = .medium
+    @State private var amount: Double? = nil
     
     // Recurrence properties
     @State private var recurrencePattern: RecurrencePattern = .never
@@ -75,6 +76,33 @@ struct CreateTaskFromEmailView: View {
                         // Priority Picker
                         VStack(alignment: .leading, spacing: 8) {
                             PriorityPicker(selection: $priority, style: .buttons, showNone: false)
+                        }
+                        
+                        // Amount field
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Amount (optional)")
+                                .font(.headline)
+                            
+                            Text("For bills, invoices, or financial tasks")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            HStack(spacing: 8) {
+                                TextField(
+                                    "Amount",
+                                    value: $amount,
+                                    format: .currency(code: Locale.current.currency?.identifier ?? "USD")
+                                )
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 200)
+                                
+                                if amount != nil {
+                                    Button("Clear") {
+                                        amount = nil
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                            }
                         }
                         
                         Toggle("Set Due Date", isOn: $hasDueDate)
@@ -186,6 +214,7 @@ struct CreateTaskFromEmailView: View {
             emailSender: email.sender,
             gmailURL: email.gmailURL.absoluteString,
             sectionID: selectedSectionID,  // Assign to selected section
+            amount: amount,
             priority: priority,
             recurrencePattern: hasDueDate ? recurrencePattern : .never,
             recurrenceInterval: recurrenceInterval,

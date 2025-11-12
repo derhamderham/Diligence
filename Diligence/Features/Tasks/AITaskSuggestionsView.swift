@@ -276,7 +276,9 @@ struct AITaskSuggestionsView: View {
             emailSubject: email.subject,
             emailSender: email.sender,
             gmailURL: email.gmailURL.absoluteString,
-            sectionID: edited.sectionID
+            sectionID: edited.sectionID,
+            amount: edited.amount,
+            priority: edited.priority ?? .medium
         )
         
         // Handle recurring tasks
@@ -553,6 +555,35 @@ struct AITaskSuggestionRow: View {
                     .controlSize(.small)
                 }
                 
+                // Priority selection
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Priority")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
+                    
+                    Picker("Priority", selection: $editedSuggestion.priority) {
+                        Text("None")
+                            .tag(nil as DiligenceTaskPriority?)
+                        
+                        ForEach([DiligenceTaskPriority.low, .medium, .high], id: \.self) { priority in
+                            HStack {
+                                Circle()
+                                    .fill(priority.color)
+                                    .frame(width: 8, height: 8)
+                                Text(priority.displayName)
+                            }
+                            .tag(priority as DiligenceTaskPriority?)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: editedSuggestion.priority) { _, _ in
+                        onEditChanged(editedSuggestion)
+                    }
+                }
+            }
+            
+            HStack(spacing: 16) {
                 // Section assignment
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Section")
@@ -572,6 +603,36 @@ struct AITaskSuggestionRow: View {
                     .pickerStyle(.menu)
                     .onChange(of: editedSuggestion.sectionID) { _, _ in
                         onEditChanged(editedSuggestion)
+                    }
+                }
+            }
+            
+            // Amount field
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Amount")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                
+                HStack(spacing: 8) {
+                    TextField(
+                        "Amount",
+                        value: $editedSuggestion.amount,
+                        format: .currency(code: Locale.current.currency?.identifier ?? "USD")
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 200)
+                    .onChange(of: editedSuggestion.amount) { _, _ in
+                        onEditChanged(editedSuggestion)
+                    }
+                    
+                    if editedSuggestion.amount != nil {
+                        Button("Clear Amount") {
+                            editedSuggestion.amount = nil
+                            onEditChanged(editedSuggestion)
+                        }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
                     }
                 }
             }

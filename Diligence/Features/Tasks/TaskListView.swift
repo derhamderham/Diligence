@@ -250,13 +250,16 @@ class TaskSection {
             // Debug: Print sections count
             let _ = print("📊 TaskListView sections count: \(sections.count)")
             
-            // Show sections with their tasks
+            // Show sections with their INCOMPLETE tasks only
             ForEach(sections, id: \.id) { section in
-                sectionView(for: section)
+                incompleteSectionView(for: section)
             }
             
-            // Unsectioned tasks
-            unsectionedTasksView
+            // Unsectioned incomplete tasks
+            incompleteUnsectionedTasksView
+            
+            // All completed tasks at the bottom, organized by section
+            completedTasksView
         }
         .listStyle(.sidebar)
         .onChange(of: selectedTask) { oldValue, newValue in
@@ -268,17 +271,17 @@ class TaskSection {
     }
     
     @ViewBuilder
-    private func sectionView(for section: TaskSection) -> some View {
+    private func incompleteSectionView(for section: TaskSection) -> some View {
         let sectionTasks = tasksForSection(section)
         let incompleteSectionTasks = sectionTasks.filter { !$0.isCompleted }
-        let completedSectionTasks = sectionTasks.filter { $0.isCompleted }
         
         // Debug logging
-        let _ = print("📊 Section '\(section.title)' has \(sectionTasks.count) tasks (\(incompleteSectionTasks.count) incomplete)")
+        let _ = print("📊 Section '\(section.title)' has \(incompleteSectionTasks.count) incomplete tasks")
         
-        if !sectionTasks.isEmpty || true { // Always show sections, even if empty
+        // Only show sections that have incomplete tasks
+        if !incompleteSectionTasks.isEmpty {
             Section(header: sectionHeaderView(for: section, taskCount: incompleteSectionTasks.count)) {
-                // Incomplete tasks for this section
+                // Incomplete tasks for this section only
                 ForEach(incompleteSectionTasks, id: \.self) { task in
                     TaskRowView(task: task, onToggleCompletion: {
                         toggleTaskCompletion(task)
@@ -290,36 +293,16 @@ class TaskSection {
                 .onDelete { indexSet in
                     deleteSectionTasks(incompleteSectionTasks, at: indexSet)
                 }
-                
-                // Completed tasks for this section
-                if !completedSectionTasks.isEmpty {
-                    DisclosureGroup("Completed (\(completedSectionTasks.count))") {
-                        ForEach(completedSectionTasks, id: \.self) { task in
-                            TaskRowView(task: task, onToggleCompletion: {
-                                toggleTaskCompletion(task)
-                            }, onDuplicateTask: { duplicatedTask in
-                                selectedTask = duplicatedTask
-                            })
-                            .tag(task)
-                        }
-                        .onDelete { indexSet in
-                            deleteSectionTasks(completedSectionTasks, at: indexSet)
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                }
             }
         }
     }
     
     @ViewBuilder
-    private var unsectionedTasksView: some View {
+    private var incompleteUnsectionedTasksView: some View {
         let unsectioned = unsectionedTasks
         let incompleteUnsectioned = unsectioned.filter { !$0.isCompleted }
-        let completedUnsectioned = unsectioned.filter { $0.isCompleted }
         
-        if !unsectioned.isEmpty {
+        if !incompleteUnsectioned.isEmpty {
             Section("Other Tasks (\(incompleteUnsectioned.count))") {
                 ForEach(incompleteUnsectioned, id: \.self) { task in
                     TaskRowView(task: task, onToggleCompletion: {
@@ -332,23 +315,102 @@ class TaskSection {
                 .onDelete { indexSet in
                     deleteSectionTasks(incompleteUnsectioned, at: indexSet)
                 }
-                
-                if !completedUnsectioned.isEmpty {
-                    DisclosureGroup("Completed (\(completedUnsectioned.count))") {
-                        ForEach(completedUnsectioned, id: \.self) { task in
-                            TaskRowView(task: task, onToggleCompletion: {
-                                toggleTaskCompletion(task)
-                            }, onDuplicateTask: { duplicatedTask in
-                                selectedTask = duplicatedTask
-                            })
-                            .tag(task)
-                        }
-                        .onDelete { indexSet in
-                            deleteSectionTasks(completedUnsectioned, at: indexSet)
-                        }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var completedTasksView: some View {
+        let allCompletedTasks = tasks.filter { $0.isCompleted }
+        
+        if !allCompletedTasks.isEmpty {
+            Section {
+                DisclosureGroup("Completed Tasks (\(allCompletedTasks.count))") {
+                    // Show completed tasks grouped by section
+                    ForEach(sections, id: \.id) { section in
+                        completedTasksForSection(section)
                     }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    
+                    // Completed unsectioned tasks
+                    completedUnsectionedTasksSubView
+                }
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func completedTasksForSection(_ section: TaskSection) -> some View {
+        let sectionTasks = tasksForSection(section)
+        let completedSectionTasks = sectionTasks.filter { $0.isCompleted }
+        
+        if !completedSectionTasks.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                // Section header for completed tasks
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 8, height: 8)
+                    
+                    Text(section.title)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
+                    
+                    Text("(\(completedSectionTasks.count))")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 8)
+                .padding(.leading, 8)
+                
+                // Completed tasks in this section
+                ForEach(completedSectionTasks, id: \.self) { task in
+                    TaskRowView(task: task, onToggleCompletion: {
+                        toggleTaskCompletion(task)
+                    }, onDuplicateTask: { duplicatedTask in
+                        selectedTask = duplicatedTask
+                    })
+                    .tag(task)
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var completedUnsectionedTasksSubView: some View {
+        let unsectioned = unsectionedTasks
+        let completedUnsectioned = unsectioned.filter { $0.isCompleted }
+        
+        if !completedUnsectioned.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                // Header for completed unsectioned tasks
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 8, height: 8)
+                    
+                    Text("Other Tasks")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
+                    
+                    Text("(\(completedUnsectioned.count))")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 8)
+                .padding(.leading, 8)
+                
+                // Completed unsectioned tasks
+                ForEach(completedUnsectioned, id: \.self) { task in
+                    TaskRowView(task: task, onToggleCompletion: {
+                        toggleTaskCompletion(task)
+                    }, onDuplicateTask: { duplicatedTask in
+                        selectedTask = duplicatedTask
+                    })
+                    .tag(task)
                 }
             }
         }
@@ -377,8 +439,9 @@ class TaskSection {
             .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 500)
         } detail: {
             detailView
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .navigationSplitViewStyle(.automatic)
+        .navigationSplitViewStyle(.balanced)
     }
     
     @ViewBuilder
@@ -834,6 +897,63 @@ struct TaskRowView: View {
         
         print("📝 Assigning task '\(task.title)' from section '\(oldSectionName)' to section '\(newSectionName)'")
         
+        // If this is a recurring task (parent), also move all its recurring instances
+        if task.isRecurring {
+            let parentID = task.title + "_" + task.createdDate.timeIntervalSince1970.description
+            
+            // Find all recurring instances of this task
+            let descriptor = FetchDescriptor<DiligenceTask>(
+                predicate: #Predicate { $0.parentRecurringTaskID == parentID }
+            )
+            
+            do {
+                let recurringInstances = try modelContext.fetch(descriptor)
+                let instanceCount = recurringInstances.count
+                
+                // Update section for all recurring instances
+                for instance in recurringInstances {
+                    instance.sectionID = sectionID
+                }
+                
+                print("📅 Also updated \(instanceCount) recurring instance(s) to new section")
+            } catch {
+                print("⚠️ Failed to fetch recurring instances: \(error)")
+            }
+        }
+        
+        // If this is a recurring instance, also move the parent task
+        if task.isRecurringInstance, let parentID = task.parentRecurringTaskID {
+            let descriptor = FetchDescriptor<DiligenceTask>(
+                predicate: #Predicate { task in
+                    let calculatedParentID = task.title + "_" + task.createdDate.timeIntervalSince1970.description
+                    return calculatedParentID == parentID && task.isRecurring
+                }
+            )
+            
+            do {
+                let parentTasks = try modelContext.fetch(descriptor)
+                
+                if let parentTask = parentTasks.first {
+                    parentTask.sectionID = sectionID
+                    print("📅 Also updated parent recurring task to new section")
+                    
+                    // Update all sibling instances as well
+                    let siblingsDescriptor = FetchDescriptor<DiligenceTask>(
+                        predicate: #Predicate { $0.parentRecurringTaskID == parentID }
+                    )
+                    
+                    let siblings = try modelContext.fetch(siblingsDescriptor)
+                    for sibling in siblings where sibling.title != task.title {
+                        sibling.sectionID = sectionID
+                    }
+                    
+                    print("📅 Also updated \(siblings.count) sibling recurring instance(s) to new section")
+                }
+            } catch {
+                print("⚠️ Failed to fetch parent recurring task: \(error)")
+            }
+        }
+        
         do {
             try modelContext.save()
             print("✅ Successfully updated task section assignment")
@@ -929,6 +1049,14 @@ struct TaskDetailView: View {
     @State private var editedAmount: String = ""
     @State private var editedHasAmount: Bool = false
     @State private var editedPriority: TaskPriority = .medium
+    
+    // Recurrence editing properties
+    @State private var editedRecurrencePattern: RecurrencePattern = .never
+    @State private var editedRecurrenceInterval: Int = 1
+    @State private var editedRecurrenceWeekdays: [Int] = []
+    @State private var editedRecurrenceEndType: RecurrenceEndType = .never
+    @State private var editedRecurrenceEndDate: Date = Calendar.current.date(byAdding: .month, value: 6, to: Date()) ?? Date()
+    @State private var editedRecurrenceEndCount: Int = 10
     
     // DateFormatter for created date: HH:mm:ss dd-MMM-yy
     private static let createdDateFormatter: DateFormatter = {
@@ -1148,6 +1276,75 @@ struct TaskDetailView: View {
                 
                 Divider()
                 
+                // Recurrence section - only show if task has a due date or is being edited with a due date
+                if (editedHasDueDate && isEditing) || (!isEditing && task.dueDate != nil) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Recurrence")
+                            .font(.headline)
+                        
+                        if isEditing {
+                            // Show recurrence editor when editing
+                            RecurrenceQuickSetupView(
+                                recurrencePattern: $editedRecurrencePattern,
+                                recurrenceInterval: $editedRecurrenceInterval,
+                                recurrenceWeekdays: $editedRecurrenceWeekdays,
+                                recurrenceEndType: $editedRecurrenceEndType,
+                                recurrenceEndDate: $editedRecurrenceEndDate,
+                                recurrenceEndCount: $editedRecurrenceEndCount
+                            )
+                        } else {
+                            // Display current recurrence info when not editing
+                            if task.isRecurring {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "repeat")
+                                            .foregroundColor(.blue)
+                                        
+                                        Text(task.recurrenceDescription)
+                                            .font(.subheadline)
+                                            .textSelection(.enabled)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color(NSColor.controlBackgroundColor))
+                                    .cornerRadius(6)
+                                    
+                                    if let nextDue = task.nextDueDate {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "calendar.badge.clock")
+                                                .foregroundColor(.orange)
+                                                .font(.caption)
+                                            
+                                            Text("Next occurrence: \(Self.dueDateWithTimeFormatter.string(from: nextDue))")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                }
+                            } else if task.isRecurringInstance {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "repeat.1")
+                                        .foregroundColor(.purple)
+                                    
+                                    Text("This is a recurring instance")
+                                        .font(.subheadline)
+                                        .foregroundColor(.purple)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.purple.opacity(0.1))
+                                .cornerRadius(6)
+                            } else {
+                                Text("Does not repeat")
+                                    .foregroundColor(.secondary)
+                                    .italic()
+                            }
+                        }
+                    }
+                    
+                    Divider()
+                }
+                
                 // Amount section for bills/invoices
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Amount")
@@ -1243,9 +1440,9 @@ struct TaskDetailView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24) // Balanced horizontal padding
-            .padding(.vertical, 16)   // Comfortable vertical padding
+            .padding(20) // Standard macOS content padding
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationTitle("Task Details")
     }
     
@@ -1262,6 +1459,14 @@ struct TaskDetailView: View {
         // Initialize amount fields
         editedHasAmount = task.amount != nil && task.amount! > 0
         editedAmount = task.amount != nil ? String(format: "%.2f", task.amount!) : ""
+        
+        // Initialize recurrence fields
+        editedRecurrencePattern = task.recurrencePattern
+        editedRecurrenceInterval = task.recurrenceInterval
+        editedRecurrenceWeekdays = task.recurrenceWeekdays
+        editedRecurrenceEndType = task.recurrenceEndType
+        editedRecurrenceEndDate = task.recurrenceEndDate ?? Calendar.current.date(byAdding: .month, value: 6, to: Date()) ?? Date()
+        editedRecurrenceEndCount = task.recurrenceEndCount ?? 10
         
         isEditing = true
     }
@@ -1290,6 +1495,39 @@ struct TaskDetailView: View {
             task.amount = nil
         }
         
+        // Save recurrence settings (only if task has a due date)
+        let wasRecurring = task.isRecurring
+        let oldRecurrencePattern = task.recurrencePattern
+        
+        if editedHasDueDate {
+            task.recurrencePattern = editedRecurrencePattern
+            task.recurrenceInterval = editedRecurrenceInterval
+            task.recurrenceEndType = editedRecurrenceEndType
+            task.recurrenceEndDate = editedRecurrenceEndDate
+            task.recurrenceEndCount = editedRecurrenceEndCount
+            
+            // Set custom weekdays if applicable
+            if editedRecurrencePattern == .weekly || editedRecurrencePattern == .custom {
+                task.recurrenceWeekdays = editedRecurrenceWeekdays
+            } else if editedRecurrencePattern == .weekdays {
+                task.recurrenceWeekdays = [2, 3, 4, 5, 6] // Monday through Friday
+            } else {
+                task.recurrenceWeekdays = []
+            }
+        } else {
+            // If no due date, remove recurrence
+            task.recurrencePattern = .never
+            task.recurrenceWeekdays = []
+        }
+        
+        // Handle recurrence changes
+        let isNowRecurring = task.isRecurring
+        let recurrenceChanged = (wasRecurring != isNowRecurring) || (oldRecurrencePattern != task.recurrencePattern)
+        
+        if recurrenceChanged {
+            handleRecurrenceChange(wasRecurring: wasRecurring, isNowRecurring: isNowRecurring)
+        }
+        
         isEditing = false
         
         // Trigger sync with Reminders after saving changes
@@ -1297,6 +1535,55 @@ struct TaskDetailView: View {
             name: Notification.Name("TriggerRemindersSync"), 
             object: nil
         )
+    }
+    
+    /// Handles changes to recurrence settings
+    private func handleRecurrenceChange(wasRecurring: Bool, isNowRecurring: Bool) {
+        if wasRecurring && !isNowRecurring {
+            // Task is no longer recurring - delete all existing recurring instances
+            deleteRecurringInstances()
+        } else if isNowRecurring {
+            // Task is now recurring (either newly recurring or pattern changed)
+            // Delete old instances and generate new ones
+            if wasRecurring {
+                deleteRecurringInstances()
+            }
+            generateRecurringInstances()
+        }
+    }
+    
+    /// Deletes all recurring instances of this task
+    private func deleteRecurringInstances() {
+        let parentID = task.title + "_" + task.createdDate.timeIntervalSince1970.description
+        
+        let descriptor = FetchDescriptor<DiligenceTask>(
+            predicate: #Predicate { $0.parentRecurringTaskID == parentID }
+        )
+        
+        do {
+            let instances = try modelContext.fetch(descriptor)
+            for instance in instances {
+                modelContext.delete(instance)
+            }
+            print("🗑️ Deleted \(instances.count) recurring instance(s)")
+        } catch {
+            print("❌ Failed to delete recurring instances: \(error)")
+        }
+    }
+    
+    /// Generates new recurring instances for this task
+    private func generateRecurringInstances() {
+        _Concurrency.Task {
+            let endDate = Calendar.current.date(byAdding: .month, value: 3, to: Date()) ?? Date()
+            let instances = task.generateRecurringInstances(until: endDate, in: modelContext)
+            
+            do {
+                try modelContext.save()
+                print("✅ Generated \(instances.count) recurring instance(s)")
+            } catch {
+                print("❌ Failed to save recurring instances: \(error)")
+            }
+        }
     }
     
     private func toggleCompletion() {
@@ -1698,9 +1985,9 @@ struct CreateTaskDetailView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24) // Balanced horizontal padding
-            .padding(.vertical, 16)   // Comfortable vertical padding
+            .padding(20) // Standard macOS content padding
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationTitle("New Task")
     }
     

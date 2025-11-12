@@ -215,8 +215,22 @@ class AITaskService: ObservableObject {
     // MARK: - Main Task Creation Method
     
     func createAITaskSuggestions(for email: ProcessedEmail, availableSections: [TaskSection]) async throws -> [AITaskSuggestion] {
+        // Wait for service initialization if needed
+        if aiService.isInitializing {
+            print("⏳ Waiting for AI service initialization...")
+            var waitCount = 0
+            while aiService.isInitializing && waitCount < 50 {
+                try await _Concurrency.Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                waitCount += 1
+            }
+            
+            if aiService.isInitializing {
+                throw AITaskError.serviceUnavailable("AI service initialization timed out")
+            }
+        }
+        
         guard aiService.hasAvailableService else {
-            throw AITaskError.serviceUnavailable("No AI services available")
+            throw AITaskError.serviceUnavailable("No AI services available. Please ensure Apple Intelligence is enabled or Jan.ai is running.")
         }
         
         isProcessing = true
