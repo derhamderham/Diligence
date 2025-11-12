@@ -60,13 +60,15 @@ struct ContentView: View {
             .navigationTitle("Diligence")
             .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
         } detail: {
-            // Detail view based on selection
+            // Detail view based on selection - these views now contain their own list+detail layout
             Group {
                 switch selectedView {
                 case .tasks:
-                    TaskListView()
+                    LazyView(TaskListView())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .gmail:
-                    GmailView()
+                    LazyView(GmailView())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .settings, .none:
                     placeholderView
                 }
@@ -87,6 +89,21 @@ struct ContentView: View {
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Lazy View Helper
+
+/// Wrapper to defer view initialization until actually needed
+struct LazyView<Content: View>: View {
+    let build: () -> Content
+    
+    init(_ build: @autoclosure @escaping () -> Content) {
+        self.build = build
+    }
+    
+    var body: Content {
+        build()
     }
 }
 

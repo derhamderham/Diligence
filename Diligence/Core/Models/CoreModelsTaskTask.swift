@@ -340,11 +340,15 @@ final class DiligenceTask {
             if recurrenceWeekdays.isEmpty {
                 description = recurrenceInterval == 1 ? "Weekly" : "Every \(recurrenceInterval) weeks"
             } else {
-                let weekdayNames = recurrenceWeekdays.sorted().compactMap { weekdayNumber in
+                let weekdayNames = recurrenceWeekdays.sorted().compactMap { weekdayNumber -> String? in
                     let formatter = DateFormatter()
                     formatter.locale = Locale.current
-                    let weekdays = formatter.weekdaySymbols
-                    return weekdays?[safe: weekdayNumber - 1]
+                    guard let weekdays = formatter.weekdaySymbols,
+                          weekdayNumber > 0,
+                          weekdayNumber <= weekdays.count else {
+                        return nil
+                    }
+                    return weekdays[weekdayNumber - 1]
                 }
                 let pattern = recurrenceInterval == 1 ? "Weekly" : "Every \(recurrenceInterval) weeks"
                 description = "\(pattern) on \(weekdayNames.joined(separator: ", "))"
@@ -357,11 +361,15 @@ final class DiligenceTask {
             description = recurrenceInterval == 1 ? "Yearly" : "Every \(recurrenceInterval) years"
         case .custom:
             if !recurrenceWeekdays.isEmpty {
-                let weekdayNames = recurrenceWeekdays.sorted().compactMap { weekdayNumber in
+                let weekdayNames = recurrenceWeekdays.sorted().compactMap { weekdayNumber -> String? in
                     let formatter = DateFormatter()
                     formatter.locale = Locale.current
-                    let shortWeekdays = formatter.shortWeekdaySymbols
-                    return shortWeekdays?[safe: weekdayNumber - 1]
+                    guard let shortWeekdays = formatter.shortWeekdaySymbols,
+                          weekdayNumber > 0,
+                          weekdayNumber <= shortWeekdays.count else {
+                        return nil
+                    }
+                    return shortWeekdays[weekdayNumber - 1]
                 }
                 description = "Custom pattern on \(weekdayNames.joined(separator: ", "))"
             } else {

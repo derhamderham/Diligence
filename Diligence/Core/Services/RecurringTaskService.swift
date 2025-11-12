@@ -72,19 +72,16 @@ class RecurringTaskService: RecurringTaskServiceProtocol, ObservableObject {
     
     // MARK: - Private Helper Methods
     
-    /// Execute SwiftData operations in isolation to avoid EventKit/Reminders conflicts
-    private func withEventKitIsolation<T>(_ operation: () throws -> T) rethrows -> T {
-        // Create a completely isolated execution context
+    /// Execute operations with autorelease pool for better memory management
+    private func withAutorelease<T>(_ operation: () throws -> T) rethrows -> T {
         return try autoreleasepool {
-            // Add a small delay to prevent rapid successive operations that can cause port conflicts
-            Thread.sleep(forTimeInterval: 0.001) // 1ms delay
-            
-            // Disable any potential EventKit observers during this operation
-            let result = try operation()
-            
-            // Force memory cleanup to prevent lingering EventKit references
-            return result
+            return try operation()
         }
+    }
+    
+    /// Helper to generate consistent task IDs
+    private func getTaskID(for task: DiligenceTask) -> String {
+        return task.title + "_" + String(task.createdDate.timeIntervalSince1970)
     }
     
     /// Create a new isolated ModelContext for sensitive operations
@@ -115,7 +112,7 @@ class RecurringTaskService: RecurringTaskServiceProtocol, ObservableObject {
             isolatedContext.rollback()
         }
         
-        return try withEventKitIsolation {
+        return try withAutorelease {
             let tasks = try isolatedContext.fetch(descriptor)
             
             // Pre-load all critical properties to avoid lazy loading conflicts
@@ -163,97 +160,41 @@ class RecurringTaskService: RecurringTaskServiceProtocol, ObservableObject {
     func generateUpcomingRecurringTasks(daysAhead: Int = 90) async {
         let endDate = Calendar.current.date(byAdding: .day, value: daysAhead, to: Date()) ?? Date()
         
-        // Use smaller batch size to reduce EventKit interference and system resource conflicts
-        let batchSize = 5 // Reduced from 10 to further minimize port conflicts
-        var offset = 0
-        var allRecurringTasks: [DiligenceTask] = []
-        var retryCount = 0
-        let maxRetries = 3
-        
         do {
             let startTime = CFAbsoluteTimeGetCurrent()
             
-            // Fetch tasks in small batches to minimize EventKit conflicts
-            while retryCount <= maxRetries {
-                do {
-                    let batchTasks = try withEventKitIsolation { () -> [DiligenceTask] in
-                        var descriptor = FetchDescriptor<DiligenceTask>(
-                            predicate: #Predicate { task in
-                                task.isRecurringInstance == false
-                            }
-                        )
-                        descriptor.fetchLimit = batchSize
-                        descriptor.fetchOffset = offset
-                        
-                        let tasks = try safeFetchTasks(descriptor: descriptor)
-                        return tasks.filter { task in
-                            task.recurrencePattern != .never
-                        }
-                    }
-                    
-                    if batchTasks.isEmpty {
-                        break
-                    }
-                    
-                    allRecurringTasks.append(contentsOf: batchTasks)
-                    offset += batchSize
-                    retryCount = 0 // Reset retry count on successful batch
-                    
-                    // Small delay to prevent overwhelming the system and reduce port conflicts
-                    try await _Concurrency.Task.sleep(for: .milliseconds(15)) // Increased delay for port stability
-                    
-                } catch {
-                    retryCount += 1
-                    print("⚠️ Batch fetch failed (attempt \(retryCount)/\(maxRetries)): \(error)")
-                    
-                    if retryCount <= maxRetries {
-                        // Exponential backoff for retries
-                        try await _Concurrency.Task.sleep(for: .milliseconds(100 * retryCount))
-                    } else {
-                        print("❌ Max retries exceeded, stopping batch fetch")
-                        break
-                    }
+            // Single fetch - much faster than batched fetches
+            let descriptor = FetchDescriptor<DiligenceTask>(
+                predicate: #Predicate { task in
+                    task.isRecurringInstance == false
                 }
+            )
+            
+            let allTasks = try modelContext.fetch(descriptor)
+            let recurringTasks = allTasks.filter { 
+                $0.recurrencePattern != .never && !$0.hasRecurrenceEnded 
             }
             
             let fetchTime = CFAbsoluteTimeGetCurrent() - startTime
-            if fetchTime > 0.5 { // Increased threshold due to batching
-                print("⚠️ Slow batch fetch detected: \(fetchTime)s - possible EventKit interference")
-            }
             
-            // Process generation in isolation with error handling
+            // Process all recurring tasks
             var successCount = 0
-            for task in allRecurringTasks {
-                withEventKitIsolation {
-                    if !task.hasRecurrenceEnded {
-                        let _ = task.generateRecurringInstances(until: endDate, in: modelContext)
-                        successCount += 1
-                    }
+            for task in recurringTasks {
+                withAutorelease {
+                    let _ = task.generateRecurringInstances(until: endDate, in: modelContext)
+                    successCount += 1
                 }
             }
             
-            // Save changes in isolation with retry logic
-            var saveRetryCount = 0
-            while saveRetryCount <= maxRetries {
-                do {
-                    try withEventKitIsolation {
-                        try modelContext.save()
-                    }
-                    break
-                } catch {
-                    saveRetryCount += 1
-                    print("⚠️ Save failed (attempt \(saveRetryCount)/\(maxRetries)): \(error)")
-                    
-                    if saveRetryCount <= maxRetries {
-                        try await _Concurrency.Task.sleep(for: .milliseconds(50 * saveRetryCount))
-                    }
-                }
+            // Save all changes at once
+            try withAutorelease {
+                try modelContext.save()
             }
             
-            print("✅ Generated recurring instances for \(successCount)/\(allRecurringTasks.count) tasks in \(fetchTime)s")
+            print("✅ Generated recurring instances for \(successCount)/\(recurringTasks.count) tasks in \(fetchTime)s")
             
         } catch {
-            print("❌ Critical error in generateUpcomingRecurringTasks: \(error)")
+            print("❌ Error in generateUpcomingRecurringTasks: \(error)")
         }
     }
     
@@ -262,7 +203,7 @@ class RecurringTaskService: RecurringTaskServiceProtocol, ObservableObject {
         guard task.isRecurringInstance else { return }
         
         do {
-            try withEventKitIsolation {
+            try withAutorelease {
                 task.isCompleted = true
                 
                 // Find the parent recurring task and update its count if needed
@@ -302,7 +243,7 @@ class RecurringTaskService: RecurringTaskServiceProtocol, ObservableObject {
     
     /// Delete a recurring task and all its instances
     func deleteRecurringTask(_ task: DiligenceTask) async {
-        let taskID = task.title + "_" + String(task.createdDate.timeIntervalSince1970)
+        let taskID = getTaskID(for: task)
         
         // Delete all instances
         let instancesDescriptor = FetchDescriptor<DiligenceTask>(
@@ -330,7 +271,7 @@ class RecurringTaskService: RecurringTaskServiceProtocol, ObservableObject {
     func updateRecurringTaskPattern(_ task: DiligenceTask) async {
         guard task.isRecurring else { return }
         
-        let taskID = task.title + "_" + String(task.createdDate.timeIntervalSince1970)
+        let taskID = getTaskID(for: task)
         let currentDate = Date()
         
         // Delete existing future instances
@@ -367,7 +308,7 @@ class RecurringTaskService: RecurringTaskServiceProtocol, ObservableObject {
     func getRecurringTaskInstances(for task: DiligenceTask) -> [DiligenceTask] {
         guard task.isRecurring else { return [] }
         
-        let taskID = task.title + "_" + String(task.createdDate.timeIntervalSince1970)
+        let taskID = getTaskID(for: task)
         let descriptor = FetchDescriptor<DiligenceTask>(
             predicate: #Predicate { instanceTask in
                 instanceTask.parentRecurringTaskID == taskID
@@ -489,10 +430,3 @@ class RecurringTaskService: RecurringTaskServiceProtocol, ObservableObject {
     }
 }
 
-// MARK: - Array Extension for Safe Access
-
-extension Array {
-    subscript(safe index: Index) -> Element? {
-        return indices.contains(index) ? self[index] : nil
-    }
-}

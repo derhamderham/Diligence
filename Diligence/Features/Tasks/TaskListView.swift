@@ -42,21 +42,38 @@ class TaskSection {
     @State private var isPerformingOperation = false // Prevent rapid operations
     @State private var refreshTrigger = false // Force UI refresh
     
+    // MARK: - Search State
+    @State private var searchText: String = ""
+    @State private var showingSearchHelp = false
+    @State private var parsedQuery: SearchQuery = SearchQuery()
+    
     private var syncStatusText: String {
         return remindersService.getSyncStatusText()
     }
     
+    // MARK: - Filtered Tasks
+    
+    /// All tasks filtered by the current search query
+    var filteredTasks: [DiligenceTask] {
+        if searchText.isEmpty {
+            return tasks
+        }
+        return tasks.filter { task in
+            TaskSearchFilter.matches(task: task, query: parsedQuery, sections: sections)
+        }
+    }
+    
     var incompleteTasks: [DiligenceTask] {
-        tasks.filter { !$0.isCompleted }
+        filteredTasks.filter { !$0.isCompleted }
     }
     
     var completedTasks: [DiligenceTask] {
-        tasks.filter { $0.isCompleted }
+        filteredTasks.filter { $0.isCompleted }
     }
     
     // Group tasks by sections and sort by due date
     func tasksForSection(_ section: TaskSection) -> [DiligenceTask] {
-        let tasksInSection = tasks.filter { $0.sectionID == section.id }
+        let tasksInSection = filteredTasks.filter { $0.sectionID == section.id }
         
         // Sort by due date: tasks with due dates first (sorted by date), then tasks without due dates
         let sortedTasks = tasksInSection.sorted { task1, task2 in
@@ -83,7 +100,7 @@ class TaskSection {
     }
     
     var unsectionedTasks: [DiligenceTask] {
-        let unsectioned = tasks.filter { $0.sectionID == nil || $0.sectionID?.isEmpty == true }
+        let unsectioned = filteredTasks.filter { $0.sectionID == nil || $0.sectionID?.isEmpty == true }
         
         // Sort by due date: tasks with due dates first (sorted by date), then tasks without due dates
         let sortedTasks = unsectioned.sorted { task1, task2 in
@@ -113,37 +130,43 @@ class TaskSection {
     
     @ViewBuilder
     private var headerView: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Tasks")
-                    .font(.title2)
-                    .fontWeight(.medium)
-                
-                // Reminders sync status
-                HStack(spacing: 4) {
-                    Image(systemName: remindersService.isAuthorized ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundColor(remindersService.isAuthorized ? .green : .red)
-                        .font(.caption)
+        VStack(spacing: 0) {
+            // Title and actions row
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Tasks")
+                        .font(.title2)
+                        .fontWeight(.medium)
                     
-                    Text(syncStatusText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 8) {
-                // Permission request buttons (shown when not authorized)
-                if !remindersService.isAuthorized {
-                    permissionButtons
+                    // Reminders sync status
+                    HStack(spacing: 4) {
+                        Image(systemName: remindersService.isAuthorized ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundColor(remindersService.isAuthorized ? .green : .red)
+                            .font(.caption)
+                        
+                        Text(syncStatusText)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
-                // Action buttons
-                actionButtons
+                Spacer()
+                
+                HStack(spacing: 8) {
+                    // Permission request buttons (shown when not authorized)
+                    if !remindersService.isAuthorized {
+                        permissionButtons
+                    }
+                    
+                    // Action buttons
+                    actionButtons
+                }
             }
+            .padding()
+            
+            // Search bar
+            searchBarView
         }
-        .padding()
         .background(Color(NSColor.controlBackgroundColor))
     }
     
@@ -163,6 +186,167 @@ class TaskSection {
             .buttonStyle(.bordered)
             .foregroundColor(.blue)
             .help("Open System Settings to manually grant access")
+        }
+    }
+    
+    // MARK: - Search Bar
+    
+    @ViewBuilder
+    private var searchBarView: some View {
+        HStack(spacing: 8) {
+            // Search icon
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+                .font(.body)
+            
+            // Search text field
+            TextField("Search tasks...", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .onChange(of: searchText) { oldValue, newValue in
+                    // Parse the search query as user types
+                    parsedQuery = TaskSearchParser.parse(newValue)
+                }
+            
+            // Clear button
+            if !searchText.isEmpty {
+                Button(action: {
+                    searchText = ""
+                    parsedQuery = SearchQuery()
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear search")
+            }
+            
+            // Help button
+            Button(action: {
+                showingSearchHelp.toggle()
+            }) {
+                Image(systemName: "questionmark.circle")
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Search syntax help")
+            .popover(isPresented: $showingSearchHelp) {
+                searchHelpView
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(NSColor.textBackgroundColor))
+        .cornerRadius(8)
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+    }
+    
+    @ViewBuilder
+    private var searchHelpView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Advanced Search Syntax")
+                .font(.headline)
+                .fontWeight(.semibold)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                searchHelpSection(
+                    title: "Basic Search",
+                    examples: [
+                        ("payroll", "Find tasks containing 'payroll'"),
+                        ("payroll tax", "Find tasks with both 'payroll' AND 'tax'")
+                    ]
+                )
+                
+                Divider()
+                
+                searchHelpSection(
+                    title: "Operators",
+                    examples: [
+                        ("payroll OR invoice", "Tasks with either term"),
+                        ("payroll NOT tax", "Tasks with 'payroll' but not 'tax'"),
+                        ("-tax", "Exclude tasks with 'tax'"),
+                        ("\"payroll tax\"", "Exact phrase match")
+                    ]
+                )
+                
+                Divider()
+                
+                searchHelpSection(
+                    title: "Wildcards",
+                    examples: [
+                        ("pay*", "Matches payroll, payment, pay, etc.")
+                    ]
+                )
+                
+                Divider()
+                
+                searchHelpSection(
+                    title: "Field-Specific Filters",
+                    examples: [
+                        ("title:payroll", "Search only in title"),
+                        ("amount:>5000", "Amount greater than 5000"),
+                        ("amount:<1000", "Amount less than 1000"),
+                        ("priority:high", "High priority tasks"),
+                        ("status:completed", "Completed tasks"),
+                        ("section:work", "Tasks in 'work' section"),
+                        ("due:today", "Due today"),
+                        ("due:>today", "Due after today")
+                    ]
+                )
+                
+                Divider()
+                
+                searchHelpSection(
+                    title: "Complex Examples",
+                    examples: [
+                        ("payroll AND amount:>5000", "Payroll tasks over $5000"),
+                        ("priority:high OR priority:medium", "Medium or high priority"),
+                        ("invoice NOT status:completed", "Incomplete invoices"),
+                        ("\"tax return\" AND due:<today", "Overdue tax returns")
+                    ]
+                )
+            }
+            
+            Text("💡 Tip: Searches are case-insensitive and match across title, description, amount, section, and more.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.top, 8)
+        }
+        .padding()
+        .frame(width: 450)
+    }
+    
+    @ViewBuilder
+    private func searchHelpSection(title: String, examples: [(query: String, description: String)]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(examples, id: \.query) { example in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(example.query)
+                            .font(.caption)
+                            .fontDesign(.monospaced)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.1))
+                            .cornerRadius(4)
+                        
+                        Text("—")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                        
+                        Text(example.description)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                    }
+                }
+            }
         }
     }
     
@@ -217,7 +401,7 @@ class TaskSection {
     
     @ViewBuilder
     private var mainContentView: some View {
-        if tasks.isEmpty {
+        if filteredTasks.isEmpty {
             emptyStateView
         } else {
             taskListView
@@ -227,19 +411,42 @@ class TaskSection {
     @ViewBuilder
     private var emptyStateView: some View {
         VStack(spacing: 16) {
-            Text("No tasks yet")
-                .font(.title3)
-                .foregroundColor(.secondary)
-            
-            Text("Create a task manually or import emails from Gmail to get started.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
-            
-            Button("Create First Task") {
-                selectedTask = nil // This will show the create form in detail view
+            if !searchText.isEmpty {
+                // No search results
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 48))
+                    .foregroundColor(.secondary)
+                
+                Text("No tasks found")
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+                
+                Text("No tasks match '\(searchText)'")
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
+                
+                Button("Clear Search") {
+                    searchText = ""
+                    parsedQuery = SearchQuery()
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                // No tasks at all
+                Text("No tasks yet")
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+                
+                Text("Create a task manually or import emails from Gmail to get started.")
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
+                
+                Button("Create First Task") {
+                    selectedTask = nil // This will show the create form in detail view
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -247,6 +454,32 @@ class TaskSection {
     @ViewBuilder
     private var taskListView: some View {
         List(selection: $selectedTask) {
+            // Search results indicator
+            if !searchText.isEmpty {
+                Section {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                        
+                        Text("Showing \(filteredTasks.count) of \(tasks.count) tasks")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Button("Clear") {
+                            searchText = ""
+                            parsedQuery = SearchQuery()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            
             // Debug: Print sections count
             let _ = print("📊 TaskListView sections count: \(sections.count)")
             
@@ -429,19 +662,22 @@ class TaskSection {
     
     @ViewBuilder
     private var mainNavigationView: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
+            // List pane
             VStack(spacing: 0) {
                 headerView
                 Divider()
                     .frame(height: 1)
                 mainContentView
             }
-            .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 500)
-        } detail: {
+            .frame(minWidth: 300, idealWidth: 400, maxWidth: 500)
+            
+            Divider()
+            
+            // Detail pane
             detailView
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .navigationSplitViewStyle(.balanced)
     }
     
     @ViewBuilder
@@ -923,17 +1159,23 @@ struct TaskRowView: View {
         
         // If this is a recurring instance, also move the parent task
         if task.isRecurringInstance, let parentID = task.parentRecurringTaskID {
-            let descriptor = FetchDescriptor<DiligenceTask>(
+            // First find the parent task by matching parentRecurringTaskID
+            let parentDescriptor = FetchDescriptor<DiligenceTask>(
                 predicate: #Predicate { task in
-                    let calculatedParentID = task.title + "_" + task.createdDate.timeIntervalSince1970.description
-                    return calculatedParentID == parentID && task.isRecurring
+                    task.isRecurring
                 }
             )
             
             do {
-                let parentTasks = try modelContext.fetch(descriptor)
+                let allRecurringTasks = try modelContext.fetch(parentDescriptor)
                 
-                if let parentTask = parentTasks.first {
+                // Manually find the parent by generating its ID
+                let parentTask = allRecurringTasks.first { recurringTask in
+                    let generatedParentID = recurringTask.title + "_" + recurringTask.createdDate.timeIntervalSince1970.description
+                    return generatedParentID == parentID
+                }
+                
+                if let parentTask = parentTask {
                     parentTask.sectionID = sectionID
                     print("📅 Also updated parent recurring task to new section")
                     

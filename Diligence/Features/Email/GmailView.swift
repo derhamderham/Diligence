@@ -186,14 +186,17 @@ struct GmailView: View {
     @Environment(\.dependencyContainer) private var container
     
     var body: some View {
-        NavigationSplitView(sidebar: {
+        HStack(spacing: 0) {
+            // List pane
             mainSidebarContent
-                .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 500)
-        }, detail: {
+                .frame(minWidth: 300, idealWidth: 400, maxWidth: 500)
+            
+            Divider()
+            
+            // Detail pane
             detailContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        })
-        .navigationSplitViewStyle(.balanced)
+        }
         .sheet(isPresented: $showingAITaskSuggestions) {
             if let email = selectedEmail {
                 AITaskSuggestionsView(
