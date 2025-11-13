@@ -130,7 +130,7 @@ final class DiligenceTask {
     ///
     /// Use priority to organize and distinguish important tasks.
     /// Defaults to `.medium` for new tasks.
-    var priorityRawValue: Int = DiligenceTaskPriority.medium.rawValue
+    var priorityRawValue: Int = TaskPriority.medium.rawValue
     
     // MARK: - Recurrence Properties
     
@@ -233,7 +233,7 @@ final class DiligenceTask {
          reminderID: String? = nil,
          sectionID: String? = nil,
          amount: Double? = nil,
-         priority: DiligenceTaskPriority = .medium,
+         priority: TaskPriority = .medium,
          recurrencePattern: RecurrencePattern = RecurrencePattern.never,
          recurrenceInterval: Int = 1,
          recurrenceEndType: RecurrenceEndType = RecurrenceEndType.never,
@@ -275,9 +275,9 @@ final class DiligenceTask {
     ///
     /// This computed property provides type-safe access to the priority,
     /// falling back to `.medium` if the stored raw value is invalid.
-    var priority: DiligenceTaskPriority {
+    var priority: TaskPriority {
         get {
-            return DiligenceTaskPriority(rawValue: priorityRawValue) ?? .medium
+            return TaskPriority(rawValue: priorityRawValue) ?? .medium
         }
         set {
             priorityRawValue = newValue.rawValue
@@ -523,6 +523,7 @@ final class DiligenceTask {
                     emailSender: emailSender,
                     gmailURL: gmailURL,
                     sectionID: sectionID,
+                    amount: amount,  // Inherit amount from parent task (for bills, invoices, etc.)
                     priority: priority,  // Inherit priority from parent task
                     parentRecurringTaskID: title + "_" + createdDate.timeIntervalSince1970.description,
                     isRecurringInstance: true,

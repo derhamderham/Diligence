@@ -21,10 +21,10 @@ import SwiftUI
 /// PriorityBadge(priority: .medium, style: .compact)
 /// ```
 struct PriorityBadge: View {
-    let priority: DiligenceTaskPriority
+    let priority: TaskPriority
     let style: PriorityBadgeStyle
     
-    init(priority: DiligenceTaskPriority, style: PriorityBadgeStyle = .compact) {
+    init(priority: TaskPriority, style: PriorityBadgeStyle = .compact) {
         self.priority = priority
         self.style = style
     }
@@ -130,13 +130,13 @@ struct PriorityBadge: View {
 /// ## Usage
 ///
 /// ```swift
-/// @State private var priority: DiligenceTaskPriority = .medium
+/// @State private var priority: TaskPriority = .medium
 ///
 /// PriorityPicker(selection: $priority)
 /// PriorityPicker(selection: $priority, style: .segmented)
 /// ```
 struct PriorityPicker: View {
-    @Binding var selection: DiligenceTaskPriority
+    @Binding var selection: TaskPriority
     let style: PickerStyle
     let showNone: Bool
     
@@ -147,7 +147,7 @@ struct PriorityPicker: View {
     }
     
     init(
-        selection: Binding<DiligenceTaskPriority>,
+        selection: Binding<TaskPriority>,
         style: PickerStyle = .menu,
         showNone: Bool = true
     ) {
@@ -219,11 +219,11 @@ struct PriorityPicker: View {
     
     // MARK: - Helper Properties
     
-    private var priorityOptions: [DiligenceTaskPriority] {
+    private var priorityOptions: [TaskPriority] {
         if showNone {
-            return DiligenceTaskPriority.allCases
+            return TaskPriority.allCases
         } else {
-            return DiligenceTaskPriority.allCases.filter { $0 != .none }
+            return TaskPriority.allCases.filter { $0 != .none }
         }
     }
 }
@@ -232,7 +232,7 @@ struct PriorityPicker: View {
 
 /// Individual button for priority selection
 private struct PriorityButton: View {
-    let priority: DiligenceTaskPriority
+    let priority: TaskPriority
     let isSelected: Bool
     let action: () -> Void
     
@@ -270,10 +270,10 @@ private struct PriorityButton: View {
 /// This view combines a priority badge with an optional vertical accent bar
 /// for enhanced visibility in task lists.
 struct PriorityIndicator: View {
-    let priority: DiligenceTaskPriority
+    let priority: TaskPriority
     let showAccentBar: Bool
     
-    init(priority: DiligenceTaskPriority, showAccentBar: Bool = true) {
+    init(priority: TaskPriority, showAccentBar: Bool = true) {
         self.priority = priority
         self.showAccentBar = showAccentBar
     }
@@ -301,7 +301,7 @@ struct PriorityIndicator: View {
                 .font(.headline)
             
             HStack(spacing: 16) {
-                ForEach(DiligenceTaskPriority.allCases, id: \.self) { priority in
+                ForEach(TaskPriority.allCases, id: \.self) { priority in
                     PriorityBadge(priority: priority, style: .compact)
                 }
             }
@@ -312,7 +312,7 @@ struct PriorityIndicator: View {
                 .font(.headline)
             
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(DiligenceTaskPriority.allCases, id: \.self) { priority in
+                ForEach(TaskPriority.allCases, id: \.self) { priority in
                     PriorityBadge(priority: priority, style: .labeled)
                 }
             }
@@ -323,7 +323,7 @@ struct PriorityIndicator: View {
                 .font(.headline)
             
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(DiligenceTaskPriority.allCases, id: \.self) { priority in
+                ForEach(TaskPriority.allCases, id: \.self) { priority in
                     PriorityBadge(priority: priority, style: .full)
                 }
             }
@@ -334,7 +334,7 @@ struct PriorityIndicator: View {
                 .font(.headline)
             
             HStack(spacing: 16) {
-                ForEach(DiligenceTaskPriority.allCases, id: \.self) { priority in
+                ForEach(TaskPriority.allCases, id: \.self) { priority in
                     PriorityBadge(priority: priority, style: .dot)
                 }
             }
@@ -344,7 +344,7 @@ struct PriorityIndicator: View {
 }
 
 #Preview("Priority Pickers") {
-    @Previewable @State var selectedPriority: DiligenceTaskPriority = .medium
+    @Previewable @State var selectedPriority: TaskPriority = .medium
     
     VStack(spacing: 30) {
         VStack(alignment: .leading, spacing: 12) {

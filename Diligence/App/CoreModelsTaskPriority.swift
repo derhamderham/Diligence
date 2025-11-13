@@ -147,12 +147,7 @@ extension TaskPriority {
     }
 }
 
-// MARK: - Type Alias for Consistency
 
-/// Type alias for consistency with DiligenceTask naming
-///
-/// Use `DiligenceTaskPriority` in new code to match the `DiligenceTask` naming convention.
-public typealias DiligenceTaskPriority = TaskPriority
 
 // MARK: - Priority Badge Styles
 

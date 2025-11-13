@@ -24,6 +24,7 @@ class TaskSection {
         self.id = UUID().uuidString
         self.title = title
         self.sortOrder = sortOrder
+        self.reminderID = nil
         self.createdDate = Date()
     }
 }
@@ -41,6 +42,7 @@ class TaskSection {
     @State private var showingSectionManager = false
     @State private var isPerformingOperation = false // Prevent rapid operations
     @State private var refreshTrigger = false // Force UI refresh
+    @State private var isSyncing = false // Prevent recursive sync operations
     
     // MARK: - Search State
     @State private var searchText: String = ""
@@ -352,6 +354,17 @@ class TaskSection {
     
     @ViewBuilder
     private var actionButtons: some View {
+        // Export button
+        Button(action: { 
+            exportTasks()
+        }) {
+            Image(systemName: "square.and.arrow.up")
+                .foregroundColor(.primary)
+        }
+        .buttonStyle(.borderless)
+        .help("Export Tasks to Excel")
+        .disabled(filteredTasks.isEmpty)
+        
         // Manual sync button
         Button(action: { 
             syncWithReminders()
@@ -724,22 +737,350 @@ class TaskSection {
     // MARK: - Event Handlers
     
     private func handleOnAppear() {
+        // NUCLEAR OPTION: Force delete all corrupted sections without accessing their properties
+        forceDeleteCorruptedSections()
+        
+        // Delete badly reconstructed sections and redo with better logic
+        redoSectionReconstruction()
+        
+        // Then reconstruct sections from task data with improved name detection
+        reconstructMissingSections()
+        
         // Request Reminders access if not already authorized
         if !remindersService.isAuthorized {
             remindersService.requestAccess()
         }
     }
     
+    /// Deletes all existing sections so reconstruction can run again with better logic
+    private func redoSectionReconstruction() {
+        let redoKey = "RedoSectionReconstruction_v2" // v2 to run again with improved patterns
+        if UserDefaults.standard.bool(forKey: redoKey) {
+            return // Already ran
+        }
+        
+        print("🔄 Preparing to redo section reconstruction with improved name detection...")
+        
+        // Delete all currently existing sections (they were badly named)
+        let sectionsToDelete = sections
+        if !sectionsToDelete.isEmpty {
+            print("🗑️ Deleting \(sectionsToDelete.count) existing sections to redo reconstruction...")
+            
+            for section in sectionsToDelete {
+                modelContext.delete(section)
+            }
+            
+            do {
+                try modelContext.save()
+                print("✅ Deleted existing sections")
+            } catch {
+                print("❌ Failed to delete sections: \(error)")
+            }
+        }
+        
+        UserDefaults.standard.set(true, forKey: redoKey)
+    }
+    
+    /// Force deletes all sections in the database without trying to access their properties
+    ///
+    /// This is the nuclear option for dealing with corrupted SwiftData objects that
+    /// crash when their properties are accessed.
+    private func forceDeleteCorruptedSections() {
+        let deleteKey = "ForceDeleteAllSections_v2" // v2 to run again after previous failures
+        if UserDefaults.standard.bool(forKey: deleteKey) {
+            return // Already ran
+        }
+        
+        print("💥 FORCE DELETE: Removing all sections to clear corruption...")
+        
+        // Clear all old migration keys to ensure clean slate
+        let oldKeys = [
+            "TaskSectionReminderIDMigration_v1",
+            "TaskSectionReminderIDMigration_v2",
+            "ClearOrphanedSectionAssignments_v1",
+            "TaskSectionReconstruction_v1",
+            "ForceDeleteAllSections_v1"
+        ]
+        for key in oldKeys {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        print("🧹 Cleared old migration flags")
+        
+        // Use a descriptor to fetch sections without accessing properties
+        let descriptor = FetchDescriptor<TaskSection>()
+        
+        do {
+            let sectionsToDelete = try modelContext.fetch(descriptor)
+            print("📊 Found \(sectionsToDelete.count) sections to delete")
+            
+            // Delete each section without trying to read its properties
+            for section in sectionsToDelete {
+                modelContext.delete(section)
+            }
+            
+            try modelContext.save()
+            print("✅ Force deleted \(sectionsToDelete.count) sections")
+            
+            UserDefaults.standard.set(true, forKey: deleteKey)
+        } catch {
+            print("❌ Force delete failed: \(error)")
+            // Even if this fails, mark it as done to prevent infinite loops
+            UserDefaults.standard.set(true, forKey: deleteKey)
+        }
+    }
+    
+    /// Reconstructs sections that were deleted but are still referenced by tasks
+    ///
+    /// This helps recover from situations where sections were deleted but task
+    /// assignments were preserved.
+    private func reconstructMissingSections() {
+        let reconstructionKey = "TaskSectionReconstruction_v3" // v3 with lowered threshold and better patterns
+        if UserDefaults.standard.bool(forKey: reconstructionKey) {
+            return // Already ran
+        }
+        
+        // Clear old reconstruction flags to run with new logic
+        UserDefaults.standard.removeObject(forKey: "TaskSectionReconstruction_v1")
+        UserDefaults.standard.removeObject(forKey: "TaskSectionReconstruction_v2")
+        
+        print("🔄 Checking for missing sections referenced by tasks...")
+        
+        // Get all section IDs currently referenced by tasks
+        let referencedSectionIDs = Set(tasks.compactMap { $0.sectionID }.filter { !$0.isEmpty })
+        
+        // Get existing section IDs
+        let existingSectionIDs = Set(sections.map { $0.id })
+        
+        // Find missing sections
+        let missingSectionIDs = referencedSectionIDs.subtracting(existingSectionIDs)
+        
+        if missingSectionIDs.isEmpty {
+            print("✅ No missing sections found")
+            UserDefaults.standard.set(true, forKey: reconstructionKey)
+            return
+        }
+        
+        print("⚠️ Found \(missingSectionIDs.count) missing sections!")
+        print("🔧 Reconstructing sections from task data...")
+        
+        // Reconstruct each missing section
+        var reconstructedCount = 0
+        for (index, sectionID) in missingSectionIDs.sorted().enumerated() {
+            // Get tasks in this section to help infer the name
+            let tasksInSection = tasks.filter { $0.sectionID == sectionID }
+            
+            // Try to infer section name from common task patterns
+            let sectionName = inferSectionName(from: tasksInSection, fallbackIndex: index + 1)
+            
+            let newSection = TaskSection(
+                title: sectionName,
+                sortOrder: sections.count + index
+            )
+            newSection.id = sectionID // Preserve the original ID!
+            
+            modelContext.insert(newSection)
+            reconstructedCount += 1
+            
+            print("  ✨ Reconstructed: '\(sectionName)' with \(tasksInSection.count) tasks (ID: \(sectionID))")
+        }
+        
+        do {
+            try modelContext.save()
+            print("✅ Successfully reconstructed \(reconstructedCount) sections")
+            print("💡 You can rename these sections using 'Manage Sections' if needed")
+            
+            UserDefaults.standard.set(true, forKey: reconstructionKey)
+        } catch {
+            print("❌ Failed to save reconstructed sections: \(error)")
+        }
+    }
+    
+    /// Attempts to infer a section name from the tasks it contains
+    private func inferSectionName(from tasks: [DiligenceTask], fallbackIndex: Int) -> String {
+        guard !tasks.isEmpty else {
+            return "Section \(fallbackIndex)"
+        }
+        
+        // Collect all task titles and descriptions for analysis
+        let titles = tasks.map { $0.title.lowercased() }
+        let descriptions = tasks.map { $0.taskDescription.lowercased() }.filter { !$0.isEmpty }
+        
+        // Count pattern matches across all tasks
+        var patternScores: [String: Int] = [:]
+        
+        // Define patterns with their associated section names
+        // Order matters - more specific patterns first
+        let patterns: [(keywords: [String], sectionName: String)] = [
+            (["accounts receivable", "a/r receivable", " ar ", "receivable", "customer payment", "invoice payment"], "AR"),
+            (["accounts payable", "a/p payable", " ap ", "payable", "vendor payment", "bill payment"], "AP"),
+            (["tech support", "technical", "technology", "software", "hardware", "computer", "it support", "bug", "code"], "Tech"),
+            (["admin", "administrative", "office"], "Admin"),
+            (["marketing", "campaign", "social media"], "Marketing"),
+            (["sales", "prospect", "lead"], "Sales"),
+            (["hr", "human resources", "employee", "hiring"], "HR"),
+            (["personal"], "Personal"),
+            (["project"], "Projects")
+        ]
+        
+        // Count how many tasks match each pattern
+        for pattern in patterns {
+            var matchCount = 0
+            
+            for title in titles {
+                for keyword in pattern.keywords {
+                    if title.contains(keyword) {
+                        matchCount += 1
+                        break // Count each task only once per pattern
+                    }
+                }
+            }
+            
+            // Also check descriptions (if they exist)
+            for desc in descriptions where !desc.isEmpty {
+                for keyword in pattern.keywords {
+                    if desc.contains(keyword) {
+                        matchCount += 1
+                        break
+                    }
+                }
+            }
+            
+            if matchCount > 0 {
+                patternScores[pattern.sectionName] = matchCount
+            }
+        }
+        
+        // Print sample task titles to help identify the section
+        print("    📝 Sample tasks in section \(fallbackIndex):")
+        for (i, task) in tasks.prefix(5).enumerated() {
+            print("       \(i+1). \(task.title)")
+        }
+        if tasks.count > 5 {
+            print("       ... and \(tasks.count - 5) more")
+        }
+        
+        // Find the pattern with the highest score
+        if let bestMatch = patternScores.max(by: { $0.value < $1.value }),
+           bestMatch.value > 0 {
+            let percentage = (Double(bestMatch.value) / Double(tasks.count)) * 100
+            print("    📊 Pattern analysis: '\(bestMatch.key)' matched \(bestMatch.value)/\(tasks.count) tasks (\(String(format: "%.1f", percentage))%)")
+            
+            // Lower threshold to 10% or at least 2 tasks
+            if percentage >= 10 || bestMatch.value >= 2 {
+                return bestMatch.key
+            }
+        }
+        
+        // If no pattern matched well, check if the section is purely email-based
+        let emailTasks = tasks.filter { $0.isFromEmail }
+        if emailTasks.count == tasks.count && tasks.count < 20 {
+            return "Emails (\(tasks.count) tasks)"
+        }
+        
+        // Fallback to generic name
+        return "Section \(fallbackIndex) (\(tasks.count) tasks)"
+    }
+    /*
+    /// DEPRECATED: Old migration that tried to read corrupted sections
+    /// One-time migration to fix corrupted section data
+    ///
+    /// This recreates all existing sections with properly initialized reminderID fields,
+    /// preserving section IDs so task assignments remain intact.
+    private func migrateCorruptedSections_OLD() {
+        // Check if we've already run this migration
+        let migrationKey = "TaskSectionReminderIDMigration_v2"
+        if UserDefaults.standard.bool(forKey: migrationKey) {
+            print("✅ Section migration already completed")
+            return
+        }
+        
+        print("🔄 Running section data migration...")
+        
+        // Check if the v1 migration already ran (which would have deleted sections)
+        let v1MigrationKey = "TaskSectionReminderIDMigration_v1"
+        let v1AlreadyRan = UserDefaults.standard.bool(forKey: v1MigrationKey)
+        
+        if v1AlreadyRan {
+            print("⚠️ Previous migration (v1) already deleted sections and cleared assignments")
+            print("⚠️ Cannot automatically restore section assignments")
+            print("💡 You will need to recreate sections and manually reassign tasks")
+            
+            // Mark v2 as complete so we don't run this again
+            UserDefaults.standard.set(true, forKey: migrationKey)
+            return
+        }
+        
+        print("💡 Recreating sections with fixed data structure while preserving task assignments")
+        
+        // Collect section data before deletion
+        var sectionData: [(id: String, title: String, sortOrder: Int)] = []
+        
+        for section in sections {
+            // Try to safely extract the data we need
+            do {
+                let id = section.id
+                let title = section.title
+                let sortOrder = section.sortOrder
+                
+                sectionData.append((id: id, title: title, sortOrder: sortOrder))
+                print("  📋 Captured section: '\(title)' (ID: \(id))")
+            } catch {
+                print("  ⚠️ Could not read section data, will skip")
+            }
+        }
+        
+        if sectionData.isEmpty {
+            print("⚠️ No sections found to migrate")
+            UserDefaults.standard.set(true, forKey: migrationKey)
+            return
+        }
+        
+        // Delete all corrupted sections
+        print("🗑️ Deleting corrupted sections...")
+        for section in sections {
+            modelContext.delete(section)
+        }
+        
+        // Recreate sections with proper initialization
+        print("✨ Recreating sections with fixed data structure...")
+        for data in sectionData {
+            let newSection = TaskSection(
+                title: data.title,
+                sortOrder: data.sortOrder
+            )
+            // CRITICAL: Preserve the original ID so task assignments still work
+            newSection.id = data.id
+            modelContext.insert(newSection)
+            print("  ✓ Recreated section: '\(data.title)' with ID: \(data.id)")
+        }
+        
+        do {
+            try modelContext.save()
+            
+            // Mark migration as complete
+            UserDefaults.standard.set(true, forKey: migrationKey)
+            
+            print("✅ Migration completed successfully")
+            print("✅ Recreated \(sectionData.count) sections with original IDs")
+            print("✅ All task assignments preserved!")
+        } catch {
+            print("❌ Failed to complete migration: \(error)")
+        }
+    }
+    */
+    
     private func handleTasksChange() {
         // Sync with Reminders whenever tasks change
-        if remindersService.isAuthorized {
+        // Skip if already syncing to prevent feedback loop
+        if remindersService.isAuthorized && !isSyncing {
             syncWithReminders()
         }
     }
     
     private func handleSectionsChange() {
         // Sync with Reminders whenever sections change
-        if remindersService.isAuthorized {
+        // Skip if already syncing to prevent feedback loop
+        if remindersService.isAuthorized && !isSyncing {
             syncWithReminders()
         }
     }
@@ -765,6 +1106,11 @@ class TaskSection {
         }
         
         print("📝 Updating reminder ID for task '\(task.title)' to: \(reminderID)")
+        
+        // Set syncing flag to prevent recursive updates
+        isSyncing = true
+        defer { isSyncing = false }
+        
         task.reminderID = reminderID
         task.lastSyncedToReminders = Date()
         
@@ -774,8 +1120,9 @@ class TaskSection {
             print("✅ Successfully saved reminder ID update for task: \(task.title)")
             
             // Force UI refresh to show updated task organization
-            DispatchQueue.main.async {
-                refreshTrigger.toggle()
+            // Use a delay to ensure the save completes before refreshing
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.refreshTrigger.toggle()
             }
         } catch {
             print("❌ Failed to save reminder ID update: \(error)")
@@ -798,6 +1145,10 @@ class TaskSection {
             print("Could not find section with ID: \(sectionIDString)")
             return
         }
+        
+        // Set syncing flag to prevent recursive updates
+        isSyncing = true
+        defer { isSyncing = false }
         
         section.reminderID = reminderID
         
@@ -847,61 +1198,70 @@ class TaskSection {
             task.isCompleted.toggle()
         }
         
-        // Trigger sync after completion toggle
-        if remindersService.isAuthorized {
+        // Trigger sync after completion toggle (but not if we're already syncing)
+        if remindersService.isAuthorized && !isSyncing {
             syncWithReminders()
         }
     }
     
     
-      private func syncWithReminders() {
-          guard !tasks.isEmpty || !sections.isEmpty else {
-              print("📝 Skipping Reminders sync - no tasks or sections to sync")
-              return
-          }
-          
-          print("📝 Starting sync with Reminders: \(sections.count) sections, \(tasks.count) tasks")
-          
-          let taskData = tasks.map { task in
-              TaskSyncData(
-                  id: task.persistentModelID.hashValue.description, // Use hashValue as string ID
-                  title: task.title,
-                  description: task.taskDescription,
-                  isCompleted: task.isCompleted,
-                  dueDate: task.dueDate,
-                  reminderID: task.reminderID,
-                  isFromEmail: task.isFromEmail,
-                  emailSender: task.emailSender,
-                  emailSubject: task.emailSubject,
-                  sectionID: task.sectionID,
-                  recurrencePattern: task.recurrencePattern,
-                  recurrenceDescription: (task as DiligenceTask).recurrenceDescription,
-                  isRecurringInstance: task.isRecurringInstance
-              )
-          }
-          
-          let sectionData = sections.map { section in
-              SectionSyncData(
-                  id: section.id,
-                  title: section.title,
-                  color: nil,
-                  sortOrder: section.sortOrder,
-                  reminderID: section.reminderID
-              )
-          }
-          
-          // Debug logging for section assignments
-          let tasksWithSections = taskData.filter { $0.sectionID != nil }
-          if !tasksWithSections.isEmpty {
-              print("📝 Tasks with section assignments:")
-              for task in tasksWithSections {
-                  let sectionTitle = sections.first(where: { $0.id == task.sectionID })?.title ?? "Unknown"
-                  print("  - '\(task.title)' -> '\(sectionTitle)' (\(task.sectionID!))")
-              }
-          }
-          
-          remindersService.forceSyncNow(taskData: taskData, sectionData: sectionData)
-      }
+    private func syncWithReminders() {
+        guard !tasks.isEmpty || !sections.isEmpty else {
+            print("📝 Skipping Reminders sync - no tasks or sections to sync")
+            return
+        }
+        
+        // Prevent recursive sync calls
+        guard !isSyncing else {
+            print("📝 Skipping Reminders sync - already in progress")
+            return
+        }
+        
+        isSyncing = true
+        defer { isSyncing = false }
+        
+        print("📝 Starting sync with Reminders: \(sections.count) sections, \(tasks.count) tasks")
+        
+        let taskData = tasks.map { task in
+            TaskSyncData(
+                id: task.persistentModelID.hashValue.description, // Use hashValue as string ID
+                title: task.title,
+                description: task.taskDescription,
+                isCompleted: task.isCompleted,
+                dueDate: task.dueDate,
+                reminderID: task.reminderID,
+                isFromEmail: task.isFromEmail,
+                emailSender: task.emailSender,
+                emailSubject: task.emailSubject,
+                sectionID: task.sectionID,
+                recurrencePattern: task.recurrencePattern,
+                recurrenceDescription: (task as DiligenceTask).recurrenceDescription,
+                isRecurringInstance: task.isRecurringInstance
+            )
+        }
+        
+        let sectionData = sections.map { section in
+            SectionSyncData(
+                id: section.id,
+                title: section.title,
+                color: nil,
+                sortOrder: section.sortOrder,
+                reminderID: section.reminderID
+            )
+        }
+        
+        // Debug logging for section assignments
+        let tasksWithSections = taskData.filter { $0.sectionID != nil }
+        if !tasksWithSections.isEmpty {
+            print("📝 Tasks with section assignments:")
+            for task in tasksWithSections {
+                let sectionTitle = sections.first(where: { $0.id == task.sectionID })?.title ?? "Unknown"
+                print("  - '\(task.title)' -> '\(sectionTitle)' (\(task.sectionID!))")
+            }
+        }
+        
+        remindersService.forceSyncNow(taskData: taskData, sectionData: sectionData)
+    }
       
     
       
@@ -939,6 +1299,45 @@ class TaskSection {
         }
         
         remindersService.testSync()
+    }
+    
+    private func exportTasks() {
+        print("📊 === EXPORTING TASKS ===")
+        print("📊 Total tasks available: \(filteredTasks.count)")
+        
+        // Count tasks with sections
+        let tasksWithSections = filteredTasks.filter { $0.sectionID != nil }
+        print("📊 Tasks with sections: \(tasksWithSections.count)")
+        
+        guard !filteredTasks.isEmpty else {
+            showExportError(message: "No tasks to export")
+            return
+        }
+        
+        do {
+            // Generate CSV export (will filter to only sectioned tasks)
+            let (data, filename) = try TaskExportService.exportToCSV(
+                tasks: filteredTasks,
+                sections: sections as! [DiligenceTaskSection]
+            )
+            
+            print("✅ Successfully generated export: \(filename) (\(data.count) bytes)")
+            
+            // Open directly in Excel
+            TaskExportService.openInExcel(data: data, filename: filename, taskCount: tasksWithSections.count)
+        } catch {
+            print("❌ Export failed: \(error)")
+            showExportError(message: error.localizedDescription)
+        }
+    }
+    
+    private func showExportError(message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Export Failed"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
     
     private func deleteSectionTasks(_ tasksArray: [DiligenceTask], at offsets: IndexSet) {
@@ -1403,13 +1802,13 @@ struct TaskDetailView: View {
                     if isEditing {
                         Picker("Section", selection: $editedSectionID) {
                             Text("No Section")
-                                .tag(nil as String?)
+                                .tag(String?.none)
                             
                             ForEach(sections, id: \.id) { section in
                                 HStack {
                                     Text(section.title)
                                 }
-                                .tag(section.id as String?)
+                                .tag(Optional(section.id))
                             }
                         }
                         .pickerStyle(.menu)
@@ -1910,13 +2309,13 @@ struct CreateTaskView: View {
                             
                             Picker("Section", selection: $selectedSectionID) {
                                 Text("No Section")
-                                    .tag(nil as String?)
+                                    .tag(String?.none)
                                 
                                 ForEach(sections, id: \.id) { section in
                                     HStack {
                                         Text(section.title)
                                     }
-                                    .tag(section.id as String?)
+                                    .tag(Optional(section.id))
                                 }
                             }
                             .pickerStyle(.automatic)
@@ -2115,13 +2514,13 @@ struct CreateTaskDetailView: View {
                     
                     Picker("Section", selection: $selectedSectionID) {
                         Text("No Section")
-                            .tag(nil as String?)
+                            .tag(String?.none)
                         
                         ForEach(sections, id: \.id) { section in
                             HStack {
                                 Text(section.title)
                             }
-                            .tag(section.id as String?)
+                            .tag(Optional(section.id))
                         }
                     }
                     .pickerStyle(.automatic)
@@ -2459,6 +2858,7 @@ struct SectionRowView: View {
     
     @State private var isEditing = false
     @State private var editTitle = ""
+    @FocusState private var isTextFieldFocused: Bool
     
     @Environment(\.modelContext) private var modelContext
     
@@ -2479,6 +2879,7 @@ struct SectionRowView: View {
             if isEditing {
                 TextField("Section name", text: $editTitle)
                     .textFieldStyle(.roundedBorder)
+                    .focused($isTextFieldFocused)
                     .onSubmit {
                         saveChanges()
                     }
@@ -2528,11 +2929,16 @@ struct SectionRowView: View {
     private func startEdit() {
         editTitle = section.title
         isEditing = true
+        // Focus the text field when entering edit mode
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            isTextFieldFocused = true
+        }
     }
     
     private func cancelEdit() {
         editTitle = section.title
         isEditing = false
+        isTextFieldFocused = false
     }
     
     private func saveChanges() {
@@ -2544,6 +2950,7 @@ struct SectionRowView: View {
         do {
             try modelContext.save()
             isEditing = false
+            isTextFieldFocused = false
         } catch {
             print("Failed to save section changes: \(error)")
         }

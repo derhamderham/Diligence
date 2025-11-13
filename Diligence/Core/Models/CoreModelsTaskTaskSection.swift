@@ -58,6 +58,7 @@ final class DiligenceTaskSection {
         self.id = UUID().uuidString
         self.title = title
         self.sortOrder = sortOrder
+        self.reminderID = nil
         self.createdDate = Date()
     }
 }

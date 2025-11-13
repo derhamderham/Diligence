@@ -12,7 +12,7 @@ import SwiftUI
 /// This view demonstrates every priority component style and can be used
 /// for testing, documentation, or as a component gallery.
 struct PriorityVisualReference: View {
-    @State private var selectedPriority: DiligenceTaskPriority = .medium
+    @State private var selectedPriority: TaskPriority = .medium
     
     var body: some View {
         ScrollView {
@@ -104,7 +104,7 @@ struct PriorityVisualReference: View {
     }
     
     @ViewBuilder
-    private func priorityLevelRow(priority: DiligenceTaskPriority, description: String, example: String) -> some View {
+    private func priorityLevelRow(priority: TaskPriority, description: String, example: String) -> some View {
         HStack(alignment: .top, spacing: 16) {
             // Visual indicator
             VStack(spacing: 8) {
@@ -157,7 +157,7 @@ struct PriorityVisualReference: View {
                         .font(.headline)
                         .gridColumnAlignment(.leading)
                     
-                    ForEach(DiligenceTaskPriority.allCases, id: \.self) { priority in
+                    ForEach(TaskPriority.allCases, id: \.self) { priority in
                         Text(priority.displayName)
                             .font(.headline)
                             .foregroundColor(priority.color)
@@ -168,7 +168,7 @@ struct PriorityVisualReference: View {
                     Text("Compact")
                         .foregroundColor(.secondary)
                     
-                    ForEach(DiligenceTaskPriority.allCases, id: \.self) { priority in
+                    ForEach(TaskPriority.allCases, id: \.self) { priority in
                         PriorityBadge(priority: priority, style: .compact)
                     }
                 }
@@ -177,7 +177,7 @@ struct PriorityVisualReference: View {
                     Text("Labeled")
                         .foregroundColor(.secondary)
                     
-                    ForEach(DiligenceTaskPriority.allCases, id: \.self) { priority in
+                    ForEach(TaskPriority.allCases, id: \.self) { priority in
                         PriorityBadge(priority: priority, style: .labeled)
                     }
                 }
@@ -186,7 +186,7 @@ struct PriorityVisualReference: View {
                     Text("Full")
                         .foregroundColor(.secondary)
                     
-                    ForEach(DiligenceTaskPriority.allCases, id: \.self) { priority in
+                    ForEach(TaskPriority.allCases, id: \.self) { priority in
                         PriorityBadge(priority: priority, style: .full)
                     }
                 }
@@ -195,7 +195,7 @@ struct PriorityVisualReference: View {
                     Text("Dot")
                         .foregroundColor(.secondary)
                     
-                    ForEach(DiligenceTaskPriority.allCases, id: \.self) { priority in
+                    ForEach(TaskPriority.allCases, id: \.self) { priority in
                         HStack {
                             PriorityBadge(priority: priority, style: .dot)
                             Spacer()
@@ -336,7 +336,7 @@ struct PriorityVisualReference: View {
     }
     
     @ViewBuilder
-    private func mockTaskRow(priority: DiligenceTaskPriority, title: String, description: String, dueDate: Date?) -> some View {
+    private func mockTaskRow(priority: TaskPriority, title: String, description: String, dueDate: Date?) -> some View {
         HStack(alignment: .top, spacing: 12) {
             // Priority indicator with accent bar
             PriorityIndicator(priority: priority, showAccentBar: true)

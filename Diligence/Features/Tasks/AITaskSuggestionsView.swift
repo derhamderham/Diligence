@@ -310,7 +310,7 @@ struct EditableTaskSuggestion {
     var sectionID: String?
     var tags: [String]
     var amount: Double?
-    var priority: DiligenceTaskPriority?
+    var priority: TaskPriority?
     var isRecurring: Bool
     var recurrencePattern: String?
     
@@ -327,8 +327,8 @@ struct EditableTaskSuggestion {
     }
 }
 
-// Helper function to convert AITaskPriority to DiligenceTaskPriority
-private func convertAIPriorityToTaskPriority(_ aiPriority: AITaskPriority?) -> DiligenceTaskPriority? {
+// Helper function to convert AITaskPriority to TaskPriority
+private func convertAIPriorityToTaskPriority(_ aiPriority: AITaskPriority?) -> TaskPriority? {
     guard let aiPriority = aiPriority else { return nil }
     switch aiPriority {
     case .low:
@@ -456,7 +456,7 @@ struct AITaskSuggestionRow: View {
         }
     }
     
-    private func priorityBadge(_ priority: DiligenceTaskPriority) -> some View {
+    private func priorityBadge(_ priority: TaskPriority) -> some View {
         // Use the priority's built-in color property
         return Badge(text: priority.displayName, color: priority.color)
     }
@@ -564,16 +564,16 @@ struct AITaskSuggestionRow: View {
                     
                     Picker("Priority", selection: $editedSuggestion.priority) {
                         Text("None")
-                            .tag(nil as DiligenceTaskPriority?)
+                            .tag(nil as TaskPriority?)
                         
-                        ForEach([DiligenceTaskPriority.low, .medium, .high], id: \.self) { priority in
+                        ForEach([TaskPriority.low, .medium, .high], id: \.self) { priority in
                             HStack {
                                 Circle()
                                     .fill(priority.color)
                                     .frame(width: 8, height: 8)
                                 Text(priority.displayName)
                             }
-                            .tag(priority as DiligenceTaskPriority?)
+                            .tag(priority as TaskPriority?)
                         }
                     }
                     .pickerStyle(.menu)
