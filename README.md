@@ -423,7 +423,7 @@ SOFTWARE.
 
 **Author**: derham
 
-- GitHub: [@derham](https://github.com/derhamderham)
+- GitHub: [@derhamderham](https://github.com/derhamderham)
 - Email: derham@gmail.com *(update with your actual email)*
 
 ## Acknowledgments
