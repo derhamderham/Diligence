@@ -178,11 +178,6 @@ class EnhancedAIEmailService: ObservableObject {
             }
         }
     }
-                print("⚠️ Jan.ai warm-up failed (non-critical): \(error.localizedDescription)")
-                // Don't mark as unavailable - it might still work for actual requests
-            }
-        }
-    }
     
     // MARK: - Email Querying
     

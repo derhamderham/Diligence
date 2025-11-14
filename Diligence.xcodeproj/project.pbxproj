@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		2701B8B72EC3D083001D423D /* .gitignore in Sources */ = {isa = PBXBuildFile; fileRef = 2701B8B52EC3D079001D423D /* .gitignore */; };
+		27D4B2C02EC6D00B009E55E2 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 27D4B2BF2EC6D00B009E55E2 /* README.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,6 +33,7 @@
 		271EBAC92EC2A1A7005BF905 /* Diligence.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Diligence.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		271EBAD82EC2A1A9005BF905 /* DiligenceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DiligenceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		271EBAE22EC2A1A9005BF905 /* DiligenceUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DiligenceUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		27D4B2BF2EC6D00B009E55E2 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -85,6 +87,7 @@
 				271EBAE52EC2A1A9005BF905 /* DiligenceUITests */,
 				271EBACA2EC2A1A7005BF905 /* Products */,
 				2701B8B52EC3D079001D423D /* .gitignore */,
+				27D4B2BF2EC6D00B009E55E2 /* README.md */,
 			);
 			sourceTree = "<group>";
 		};
@@ -218,6 +221,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				27D4B2C02EC6D00B009E55E2 /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
