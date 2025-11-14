@@ -1305,9 +1305,17 @@ class TaskSection {
         print("📊 === EXPORTING TASKS ===")
         print("📊 Total tasks available: \(filteredTasks.count)")
         
-        // Count tasks with sections
-        let tasksWithSections = filteredTasks.filter { $0.sectionID != nil }
-        print("📊 Tasks with sections: \(tasksWithSections.count)")
+        // Count incomplete tasks with sections (what will actually be exported)
+        let tasksToExport = filteredTasks.filter { $0.sectionID != nil && !$0.isCompleted }
+        print("📊 Incomplete tasks with sections: \(tasksToExport.count)")
+        
+        // Show section breakdown
+        for section in sections {
+            let sectionTasks = tasksToExport.filter { $0.sectionID == section.id }
+            if !sectionTasks.isEmpty {
+                print("📊   - \(section.title): \(sectionTasks.count) tasks")
+            }
+        }
         
         guard !filteredTasks.isEmpty else {
             showExportError(message: "No tasks to export")
@@ -1315,16 +1323,37 @@ class TaskSection {
         }
         
         do {
-            // Generate CSV export (will filter to only sectioned tasks)
-            let (data, filename) = try TaskExportService.exportToCSV(
+            // Extract section data safely from SwiftData models
+            // Map TaskSection objects to ExportSection structs (no cast needed)
+            let exportSections: [ExportSection] = sections.map { section in
+                ExportSection(id: section.id, title: section.title, sortOrder: section.sortOrder)
+            }
+            
+            print("📊 Mapped \(exportSections.count) sections for export:")
+            for section in exportSections {
+                print("   - \(section.title) (ID: \(section.id), Sort: \(section.sortOrder))")
+            }
+            
+            print("📊 Exporting to multi-tab Excel workbook...")
+            
+            // Generate multi-tab Excel export (will filter to only incomplete sectioned tasks)
+            let (data, filename) = try TaskExportService.exportToExcel(
                 tasks: filteredTasks,
-                sections: sections as! [DiligenceTaskSection]
+                sections: exportSections
             )
             
-            print("✅ Successfully generated export: \(filename) (\(data.count) bytes)")
+            print("✅ Successfully generated Excel export: \(filename) (\(data.count) bytes)")
+            print("📊 Workbook structure:")
+            print("   - Summary tab: Tasks due by next Saturday")
+            for section in exportSections {
+                let sectionTasks = tasksToExport.filter { $0.sectionID == section.id }
+                if !sectionTasks.isEmpty {
+                    print("   - \(section.title) tab: \(sectionTasks.count) tasks")
+                }
+            }
             
-            // Open directly in Excel
-            TaskExportService.openInExcel(data: data, filename: filename, taskCount: tasksWithSections.count)
+            // Open directly in Excel (no success popup)
+            TaskExportService.openInExcel(data: data, filename: filename, taskCount: tasksToExport.count)
         } catch {
             print("❌ Export failed: \(error)")
             showExportError(message: error.localizedDescription)

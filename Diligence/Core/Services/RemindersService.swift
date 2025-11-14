@@ -518,17 +518,19 @@ class RemindersService: ObservableObject {
     private func setupDefaultList() async {
         if let savedCalendarID = UserDefaults.standard.string(forKey: diligenceCalendarIDKey) {
             print("📝 Looking for existing default calendar with saved ID: \(savedCalendarID)")
+            
+            // Defensive check: Verify the calendar still exists
             if let existingCalendar = eventStore.calendar(withIdentifier: savedCalendarID) {
                 if isDiligenceCalendar(existingCalendar) {
                     defaultCalendar = existingCalendar
                     print("📝 Successfully restored default Diligence list from saved ID")
                     return
                 } else {
-                    print("📝 Saved calendar ID points to non-Diligence calendar, clearing...")
+                    print("📝 ⚠️ Saved calendar ID points to non-Diligence calendar, clearing...")
                     UserDefaults.standard.removeObject(forKey: diligenceCalendarIDKey)
                 }
             } else {
-                print("📝 Saved default calendar ID no longer valid, clearing...")
+                print("📝 ⚠️ Saved default calendar ID \(savedCalendarID) no longer exists - removing stale reference")
                 UserDefaults.standard.removeObject(forKey: diligenceCalendarIDKey)
             }
         }
@@ -572,15 +574,30 @@ class RemindersService: ObservableObject {
     }
     
     private func restoreSectionLists() {
-        if let sectionCalendarData = UserDefaults.standard.data(forKey: sectionCalendarIDsKey),
-           let sectionCalendarIDs = try? JSONDecoder().decode([String: String].self, from: sectionCalendarData) {
-            for (sectionID, calendarID) in sectionCalendarIDs {
-                if let calendar = eventStore.calendar(withIdentifier: calendarID) {
-                    diligenceCalendars[sectionID] = calendar
-                    print("📝 Restored section calendar: \(calendar.title) for section: \(sectionID)")
-                } else {
-                    print("📝 Section calendar with ID \(calendarID) no longer exists")
-                }
+        guard let sectionCalendarData = UserDefaults.standard.data(forKey: sectionCalendarIDsKey),
+              let sectionCalendarIDs = try? JSONDecoder().decode([String: String].self, from: sectionCalendarData) else {
+            print("📝 No section calendars to restore")
+            return
+        }
+        
+        var validSectionCalendarIDs: [String: String] = [:]
+        
+        for (sectionID, calendarID) in sectionCalendarIDs {
+            // Defensive check: Verify calendar exists before accessing
+            if let calendar = eventStore.calendar(withIdentifier: calendarID) {
+                diligenceCalendars[sectionID] = calendar
+                validSectionCalendarIDs[sectionID] = calendarID
+                print("📝 Restored section calendar: \(calendar.title) for section: \(sectionID)")
+            } else {
+                print("📝 ⚠️ Section calendar with ID \(calendarID) for section \(sectionID) no longer exists - will be removed from cache")
+            }
+        }
+        
+        // Update UserDefaults to remove stale calendar references
+        if validSectionCalendarIDs.count != sectionCalendarIDs.count {
+            print("📝 Cleaning up \(sectionCalendarIDs.count - validSectionCalendarIDs.count) stale calendar reference(s)")
+            if let cleanedData = try? JSONEncoder().encode(validSectionCalendarIDs) {
+                UserDefaults.standard.set(cleanedData, forKey: sectionCalendarIDsKey)
             }
         }
     }
@@ -593,13 +610,15 @@ class RemindersService: ObservableObject {
     }
     
     private func getOrCreateSectionCalendar(for section: SectionSyncData) throws -> EKCalendar {
+        // Check if we have a cached calendar for this section
         if let existingCalendar = diligenceCalendars[section.id] {
             let dCalendars = getDiligenceCalendars()
+            // Defensive check: Verify the calendar still exists
             if dCalendars.contains(where: { $0.calendarIdentifier == existingCalendar.calendarIdentifier }) {
                 return existingCalendar
             } else {
+                print("📝 ⚠️ Cached section calendar for '\(section.title)' no longer exists - will recreate")
                 diligenceCalendars.removeValue(forKey: section.id)
-                print("📝 Section calendar was removed or modified externally, will recreate")
             }
         }
         
@@ -636,6 +655,41 @@ class RemindersService: ObservableObject {
         print("📝 Successfully created section calendar: \(sectionListName)")
         
         return newCalendar
+    }
+    
+    // MARK: - Calendar Reference Validation
+    
+    /// Validates and cleans up any stale calendar references that no longer exist in the system
+    private func validateAndCleanupCalendarReferences() async {
+        print("📝 Validating calendar references...")
+        
+        let allCalendars = eventStore.calendars(for: .reminder)
+        let existingCalendarIDs = Set(allCalendars.map { $0.calendarIdentifier })
+        
+        // Validate default calendar
+        if let defaultCal = defaultCalendar,
+           !existingCalendarIDs.contains(defaultCal.calendarIdentifier) {
+            print("📝 ⚠️ Default calendar '\(defaultCal.title)' no longer exists - clearing reference")
+            defaultCalendar = nil
+            UserDefaults.standard.removeObject(forKey: diligenceCalendarIDKey)
+        }
+        
+        // Validate section calendars
+        var staleCalendarCount = 0
+        for (sectionID, calendar) in diligenceCalendars {
+            if !existingCalendarIDs.contains(calendar.calendarIdentifier) {
+                print("📝 ⚠️ Section calendar '\(calendar.title)' for section '\(sectionID)' no longer exists - removing reference")
+                diligenceCalendars.removeValue(forKey: sectionID)
+                staleCalendarCount += 1
+            }
+        }
+        
+        if staleCalendarCount > 0 {
+            print("📝 Cleaned up \(staleCalendarCount) stale section calendar reference(s)")
+            saveSectionCalendars()
+        }
+        
+        print("📝 Calendar validation complete")
     }
     
     // MARK: - Sync Management
@@ -704,6 +758,9 @@ class RemindersService: ObservableObject {
     
     private func performActualSync(taskData: [TaskSyncData], sectionData: [SectionSyncData]) async {
         print("📝 Starting sync with \(sectionData.count) sections and \(taskData.count) tasks...")
+        
+        // Defensive validation: Clean up any stale calendar references before syncing
+        await validateAndCleanupCalendarReferences()
         
         do {
             var sectionCalendars: [String: EKCalendar] = [:]
@@ -861,8 +918,16 @@ class RemindersService: ObservableObject {
             allCalendars.append(defaultCal)
         }
         
+        // Defensive check: Filter out any calendars that no longer exist
+        let existingCalendarIDs = Set(eventStore.calendars(for: .reminder).map { $0.calendarIdentifier })
+        let validCalendars = allCalendars.filter { existingCalendarIDs.contains($0.calendarIdentifier) }
+        
+        if validCalendars.count < allCalendars.count {
+            print("📝 ⚠️ Filtered out \(allCalendars.count - validCalendars.count) stale calendar reference(s)")
+        }
+        
         var seenIdentifiers = Set<String>()
-        let uniqueCalendars = allCalendars.compactMap { cal -> EKCalendar? in
+        let uniqueCalendars = validCalendars.compactMap { cal -> EKCalendar? in
             if seenIdentifiers.insert(cal.calendarIdentifier).inserted {
                 return cal
             }
@@ -883,7 +948,7 @@ class RemindersService: ObservableObject {
         
         guard let reminder = existingReminder,
               let currentCal = currentCalendar else {
-            print("📝 Could not find existing reminder with ID \(reminderID)")
+            print("📝 ⚠️ Could not find existing reminder with ID \(reminderID) - it may have been deleted")
             return false
         }
         
@@ -1000,8 +1065,16 @@ class RemindersService: ObservableObject {
             allCalendars.append(defaultCal)
         }
         
+        // Defensive check: Filter out any calendars that no longer exist
+        let existingCalendarIDs = Set(eventStore.calendars(for: .reminder).map { $0.calendarIdentifier })
+        let validCalendars = allCalendars.filter { existingCalendarIDs.contains($0.calendarIdentifier) }
+        
+        if validCalendars.count < allCalendars.count {
+            print("📝 ⚠️ Skipping \(allCalendars.count - validCalendars.count) non-existent calendar(s) during cleanup")
+        }
+        
         var seenIdentifiers = Set<String>()
-        let uniqueCalendars = allCalendars.compactMap { calendar -> EKCalendar? in
+        let uniqueCalendars = validCalendars.compactMap { calendar -> EKCalendar? in
             if seenIdentifiers.insert(calendar.calendarIdentifier).inserted {
                 return calendar
             }
@@ -1016,19 +1089,36 @@ class RemindersService: ObservableObject {
         }
         
         for calendar in uniqueCalendars {
-            let existingReminders = try await getExistingReminders(from: calendar)
-            for reminder in existingReminders {
-                let reminderID = reminder.calendarItemIdentifier
-                if tasksByReminderID[reminderID] == nil {
-                    print("📝 Removing orphaned reminder: \(reminder.title ?? "Untitled") from \(calendar.title)")
-                    try eventStore.remove(reminder, commit: true)
+            do {
+                let existingReminders = try await getExistingReminders(from: calendar)
+                for reminder in existingReminders {
+                    let reminderID = reminder.calendarItemIdentifier
+                    if tasksByReminderID[reminderID] == nil {
+                        print("📝 Removing orphaned reminder: \(reminder.title ?? "Untitled") from \(calendar.title)")
+                        do {
+                            try eventStore.remove(reminder, commit: true)
+                        } catch {
+                            print("📝 ⚠️ Failed to remove orphaned reminder '\(reminder.title ?? "Untitled")': \(error.localizedDescription)")
+                            // Continue with other reminders even if one fails
+                        }
+                    }
                 }
+            } catch {
+                print("📝 ⚠️ Error checking calendar '\(calendar.title)' for orphaned reminders: \(error.localizedDescription)")
+                // Continue with other calendars even if one fails
             }
         }
     }
     
     private func getExistingReminders(from calendar: EKCalendar) async throws -> [EKReminder] {
-        try await withCheckedThrowingContinuation { continuation in
+        // Defensive check: Verify calendar still exists before fetching
+        let allCalendars = eventStore.calendars(for: .reminder)
+        guard allCalendars.contains(where: { $0.calendarIdentifier == calendar.calendarIdentifier }) else {
+            print("📝 ⚠️ Calendar '\(calendar.title)' (ID: \(calendar.calendarIdentifier)) no longer exists - skipping fetch")
+            return []
+        }
+        
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[EKReminder], Error>) in
             let predicate = eventStore.predicateForReminders(in: [calendar])
             
             // Timeout guard

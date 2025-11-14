@@ -125,6 +125,10 @@ class EnhancedAIEmailService: ObservableObject {
         isAppleIntelligenceAvailable = await appleIntelligenceService.checkAvailability()
         isJanAIAvailable = await janAIService.checkServiceAvailability()
         
+        // Warm up the selected provider to ensure it's truly ready
+        // This prevents the "no response on first click" issue
+        await warmUpServices()
+        
         // Auto-select best available provider
         if !availableProviders.contains(selectedProvider) {
             if let firstAvailable = availableProviders.first {
@@ -139,6 +143,45 @@ class EnhancedAIEmailService: ObservableObject {
         print("🤖 Apple Intelligence: \(isAppleIntelligenceAvailable ? "✅" : "❌")")
         print("🤖 Jan.ai: \(isJanAIAvailable ? "✅" : "❌")")
         print("🤖 Selected provider: \(selectedProvider.displayName)")
+    }
+    
+    /// Warm up AI services with a minimal test request to ensure they're truly ready
+    /// This prevents the "no response on first request" issue
+    private func warmUpServices() async {
+        print("🔥 Warming up AI services...")
+        
+        // Warm up Apple Intelligence if available
+        if isAppleIntelligenceAvailable {
+            do {
+                print("🔥 Warming up Apple Intelligence...")
+                // Create a minimal test session to initialize the language model
+                let testSession = LanguageModelSession(instructions: "You are a helpful assistant.")
+                _ = try await testSession.respond(to: "Hi")
+                print("✅ Apple Intelligence warmed up successfully")
+            } catch {
+                print("⚠️ Apple Intelligence warm-up failed (non-critical): \(error.localizedDescription)")
+                // Don't mark as unavailable - it might still work for actual requests
+            }
+        }
+        
+        // Warm up Jan.ai if available
+        if isJanAIAvailable {
+            do {
+                print("🔥 Warming up Jan.ai...")
+                // Make a minimal test request to ensure the connection is established
+                // This also ensures the model is loaded
+                try await janAIService.warmUp()
+                print("✅ Jan.ai warmed up successfully")
+            } catch {
+                print("⚠️ Jan.ai warm-up failed (non-critical): \(error.localizedDescription)")
+                // Don't mark as unavailable - it might still work for actual requests
+            }
+        }
+    }
+                print("⚠️ Jan.ai warm-up failed (non-critical): \(error.localizedDescription)")
+                // Don't mark as unavailable - it might still work for actual requests
+            }
+        }
     }
     
     // MARK: - Email Querying
@@ -221,11 +264,18 @@ class EnhancedAIEmailService: ObservableObject {
     
     func switchProvider(_ provider: AIProvider) {
         guard availableProviders.contains(provider) else {
-            print("❌ Provider \(provider.displayName) is not available")
+            print("⚠️ Provider \(provider.displayName) is not currently available")
+            print("   Tip: Make sure Jan.ai server is running or Apple Intelligence is enabled")
             return
         }
         selectedProvider = provider
         print("🔄 Switched to \(provider.displayName)")
+    }
+    
+    /// Force switch to a provider even if not currently available (useful for settings)
+    func forceSwitchProvider(_ provider: AIProvider) {
+        selectedProvider = provider
+        print("🔄 Force-switched to \(provider.displayName)")
     }
     
     // MARK: - Error Handling

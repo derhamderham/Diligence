@@ -95,18 +95,53 @@ struct AILLMSettingsView: View {
                     HStack(spacing: 12) {
                         ForEach(EnhancedAIEmailService.AIProvider.allCases, id: \.self) { provider in
                             Button(action: {
-                                enhancedAI.switchProvider(provider)
+                                _Concurrency.Task {
+                                    // Refresh availability first
+                                    await enhancedAI.refreshAvailability()
+                                    
+                                    // Allow switching to configure the provider
+                                    if enhancedAI.availableProviders.contains(provider) {
+                                        enhancedAI.switchProvider(provider)
+                                    } else {
+                                        // Force switch so user can configure it
+                                        enhancedAI.forceSwitchProvider(provider)
+                                    }
+                                }
                             }) {
                                 HStack(spacing: 6) {
                                     Image(systemName: provider.icon)
                                     Text(provider.displayName)
+                                    
+                                    // Show checkmark if selected
+                                    if enhancedAI.selectedProvider == provider {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 9, weight: .bold))
+                                    }
                                 }
                                 .font(.system(size: 11))
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(BorderedButtonStyle())
+                            .background(enhancedAI.selectedProvider == provider ? Color.accentColor.opacity(0.15) : Color.clear)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
                             .controlSize(.small)
-                            .disabled(!enhancedAI.availableProviders.contains(provider))
+                            // Show visual indicator but allow clicking
+                            .opacity(enhancedAI.availableProviders.contains(provider) ? 1.0 : 0.6)
                         }
+                        
+                        Button(action: {
+                            _Concurrency.Task {
+                                await enhancedAI.refreshAvailability()
+                            }
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise")
+                                Text("Refresh")
+                            }
+                            .font(.system(size: 11))
+                        }
+                        .buttonStyle(BorderedButtonStyle())
+                        .controlSize(.small)
+                        .help("Refresh AI provider availability")
                         
                         Spacer()
                     }
@@ -137,6 +172,7 @@ struct AILLMSettingsView: View {
             
             Spacer()
         }
+        .frame(maxHeight: 600)
         .onAppear {
             // Service is already initialized at app launch
             // Just test the connection
@@ -168,7 +204,7 @@ struct AILLMSettingsView: View {
                             NSWorkspace.shared.open(url)
                         }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(BorderedButtonStyle())
                     .controlSize(.small)
                 }
             }
@@ -195,7 +231,7 @@ struct AILLMSettingsView: View {
                     Button("Test Connection") {
                         testConnection()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(BorderedButtonStyle())
                     .controlSize(.mini)
                     .disabled(isTestingConnection)
                 }
@@ -245,14 +281,14 @@ struct AILLMSettingsView: View {
                         Button("Auto-detect") {
                             detectCurrentModel()
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(BorderedButtonStyle())
                         .controlSize(.mini)
                         .disabled(isDetectingModel)
                         
                         Button("Refresh List") {
                             refreshModelList()
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(BorderedButtonStyle())
                         .controlSize(.mini)
                     }
                 }

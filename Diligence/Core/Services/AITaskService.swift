@@ -257,7 +257,7 @@ class AITaskService: ObservableObject {
             
             // Step 3: Build AI prompt
             processingStatus = "Generating task suggestions..."
-            let prompt = buildTaskCreationPrompt(
+            var prompt = buildTaskCreationPrompt(
                 emailContext: emailContext,
                 attachmentContent: attachmentContent,
                 availableSections: availableSections
@@ -265,7 +265,7 @@ class AITaskService: ObservableObject {
             processingProgress = 0.7
             
             // Step 4: Query AI service
-            let response = try await aiService.queryEmails(query: prompt, emails: [email])
+            var response = try await aiService.queryEmails(query: prompt, emails: [email])
             processingProgress = 0.9
             
             // Debug: Log the response for troubleshooting
@@ -280,10 +280,31 @@ class AITaskService: ObservableObject {
             
             // Step 5: Parse and return suggestions
             processingStatus = "Parsing suggestions..."
-            let suggestions = try parseAIResponse(response)
-            processingStatus = "Complete"
-            
-            return suggestions
+            do {
+                let suggestions = try parseAIResponse(response)
+                processingStatus = "Complete"
+                return suggestions
+            } catch let error as AITaskError {
+                // Added retry logic for invalid JSON response
+                if case .invalidResponse = error {
+                    print("⚠️ Detected invalid JSON response, attempting retry with stricter prompt...")
+                    // Prepend clarifying instruction to prompt
+                    let retryPrompt = """
+                    Your previous response was not valid JSON. Return ONLY valid JSON as shown here: {\"tasks\": [...]}. No explanation.
+                    \(prompt)
+                    """
+                    // Retry query
+                    response = try await aiService.queryEmails(query: retryPrompt, emails: [email])
+                    processingStatus = "Parsing suggestions (retry)..."
+                    let suggestions = try parseAIResponse(response)
+                    processingStatus = "Complete"
+                    return suggestions
+                } else {
+                    throw error
+                }
+            } catch {
+                throw error
+            }
             
         } catch {
             lastError = error.localizedDescription
@@ -409,9 +430,9 @@ class AITaskService: ObservableObject {
         Start titles with action verbs: Pay, Review, Schedule, Respond, Complete, Follow up, Note, Plan.
 
         Return ONLY this JSON format with SPECIFIC details:
-        {"tasks":[{"title":"Pay Acme Corp invoice $1,250.00","description":"Monthly service invoice due November 30th","dueDate":"2025-11-30","section":null,"tags":[],"amount":1250.00,"priority":"medium","isRecurring":false,"recurrencePattern":null}]}
-
-        If no tasks needed, return: {"tasks":[]}
+        {\"tasks\": [{...}]}
+        This exact JSON format is required.
+        If your response is not strictly valid JSON, the user will see NO results. DO NOT provide any explanations or comments—return ONLY the JSON object.
 
         JSON response:
         """
@@ -1151,3 +1172,4 @@ enum AITaskError: LocalizedError {
         }
     }
 }
+

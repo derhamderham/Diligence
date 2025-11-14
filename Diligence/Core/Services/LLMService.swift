@@ -360,6 +360,27 @@ class LLMService: LLMServiceProtocol, ObservableObject {
         return false
     }
     
+    /// Warm up the LLM service with a minimal test request
+    /// This helps prevent "no response on first request" issues by ensuring the model is loaded
+    func warmUp() async throws {
+        guard isLLMFeatureEnabled else { return }
+        
+        let messages = [
+            ChatMessage(role: "system", content: "You are a helpful assistant."),
+            ChatMessage(role: "user", content: "Hi")
+        ]
+        
+        let request = ChatRequest(
+            model: modelName,
+            messages: messages,
+            temperature: 0.7,
+            maxTokens: 10,
+            stream: false // Use simple non-streaming for warm-up
+        )
+        
+        _ = try await performChatRequest(request)
+    }
+    
     /// Set the model name to use
     func setModel(_ model: String) {
         safelyUpdateSelectedModel(model)

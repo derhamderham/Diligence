@@ -8,8 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		2701B8B72EC3D083001D423D /* .gitignore in Sources */ = {isa = PBXBuildFile; fileRef = 2701B8B52EC3D079001D423D /* .gitignore */; };
-		27B5C1B82EC53B81008DC405 /* TaskExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27B5C1B72EC53B81008DC405 /* TaskExportService.swift */; };
-		27B5C1BA2EC53BFF008DC405 /* DiligenceTaskPriority.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27B5C1B92EC53BFF008DC405 /* DiligenceTaskPriority.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,8 +32,6 @@
 		271EBAC92EC2A1A7005BF905 /* Diligence.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Diligence.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		271EBAD82EC2A1A9005BF905 /* DiligenceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DiligenceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		271EBAE22EC2A1A9005BF905 /* DiligenceUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DiligenceUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		27B5C1B72EC53B81008DC405 /* TaskExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskExportService.swift; sourceTree = "<group>"; };
-		27B5C1B92EC53BFF008DC405 /* DiligenceTaskPriority.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiligenceTaskPriority.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -89,8 +85,6 @@
 				271EBAE52EC2A1A9005BF905 /* DiligenceUITests */,
 				271EBACA2EC2A1A7005BF905 /* Products */,
 				2701B8B52EC3D079001D423D /* .gitignore */,
-				27B5C1B72EC53B81008DC405 /* TaskExportService.swift */,
-				27B5C1B92EC53BFF008DC405 /* DiligenceTaskPriority.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -248,8 +242,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				27B5C1BA2EC53BFF008DC405 /* DiligenceTaskPriority.swift in Sources */,
-				27B5C1B82EC53B81008DC405 /* TaskExportService.swift in Sources */,
 				2701B8B72EC3D083001D423D /* .gitignore in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
